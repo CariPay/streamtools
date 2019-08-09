@@ -1,9 +1,9 @@
-from consumers import \
+from streamtools.consumers import \
     KafkaConsumerLoop, \
     AsyncIOConsumerLoop, \
     RMQIOConsumerLoop
 
-from producers import \
+from streamtools.producers import \
     KafkaProducer, \
     POSTProducer, \
     AsyncIOProducer, \
