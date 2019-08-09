@@ -11,7 +11,6 @@ from kafka import KafkaProducer as ProducerFromKafka
 import aio_pika
 
 from logger import log
-from message import Message
 
 POST_HOST = os.environ['POST_HOST']
 HOST = os.environ['KAFKA_HOST']
@@ -58,7 +57,7 @@ class ProducerABC(ABC):
         log.info(f"Producer: {self}")
 
     @abstractmethod
-    def send(self, msg: Message):
+    def send(self, msg):
         pass
 
 
@@ -121,7 +120,7 @@ class POSTProducer(ProducerABC):
     def update_attr(self, **kwargs_from_agent):
         self.key = kwargs_from_agent[self.QUEUE_TYPE]
 
-    async def send(self, msg: Message):
+    async def send(self, msg):
         endpoint = f"http://{POST_HOST}/send"
         if isinstance(msg, str):
             msg = json.loads(msg)
@@ -138,7 +137,7 @@ class AsyncIOProducer(ProducerABC):
         super().__init__(**kwargs)
         self.producer = None
 
-    async def send(self, msg: Message):
+    async def send(self, msg):
         assert self.producer != None, \
             "Producer queue object is not set"
         await self.producer.put(msg)
@@ -159,7 +158,7 @@ class RMQIOProducer(ProducerABC):
         self.key = kwargs_from_agent[self.QUEUE_TYPE]
         self.routing_key += f"-{self.key[:5]}"
 
-    async def send(self, msg: Message):
+    async def send(self, msg):
         await self.channel.default_exchange.publish(
             aio_pika.Message(
                 body=msg.encode()
