@@ -5,10 +5,10 @@ setup(
     version='0.1dev',
     packages=['streamtools',],
     install_requires=[
-        'aiokafka',
-        'aio-pika',
-        'aiohttp',
-        'requests',
+        'aiohttp==3.4.4',
+        'aiokafka==0.5.1',
+        'requests==2.22.0',
+        'aio-pika==5.6.0',
       ],
     license='Creative Commons Attribution-Noncommercial-Share Alike license',
 )
