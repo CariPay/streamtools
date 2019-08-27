@@ -1,6 +1,8 @@
 import asyncio
 import json
+import logging
 import os
+import socket
 import time
 import traceback
 from abc import ABC, abstractmethod
@@ -8,18 +10,8 @@ from abc import ABC, abstractmethod
 from aiokafka import AIOKafkaConsumer
 import aio_pika
 
-from logger import log
-
-HOST = os.environ['KAFKA_HOST']
-ENCODING = os.environ['ENCODING']
-
-RMQ_USER = os.environ['RMQ_USER']
-RMQ_PASS = os.environ['RMQ_PASS']
-RMQ_HOST = os.environ['RMQ_HOST']
-
-class AsyncioQueue(asyncio.Queue):
-    def __aiter__(self): return self
-    async def __anext__(self): return await self.get()
+from .libs import log, clean_route_string, get_free_port, AsyncioQueue, ClassRouteTableDef
+from .libs import ENCODING, RMQ_USER, RMQ_PASS, RMQ_HOST, KAFKA_HOST
 
 
 class ConsumerABC(ABC):
@@ -28,8 +20,9 @@ class ConsumerABC(ABC):
     for consuming input messages sent to the agent and messages
     produced internally.
     '''
-    def __init__(self, **kwargs):
-        self.kwargs = kwargs
+    def __init__(self, queue_name, queues_labels={}):
+        self.queue_name = queue_name
+        self.queues_labels = queues_labels
         self.loop = asyncio.get_event_loop()
         self.consumer = None
         self.a_init_ran = False
@@ -38,137 +31,144 @@ class ConsumerABC(ABC):
     async def a_init(self):
         self.a_init_ran = True
 
-    def update_attr(self, **kwargs_from_agent):
+    def add_agent_uuid(self, **kwargs_from_agent):
         pass
 
-    def __call__(self, func):
-        return self._decorator(func)
+    def __call__(self, string="", override=False):
+        queue = ""
+        if self.queue_name:
+            assert self.queue_name in self.queues_labels, f"'queue_name' arg must be one of {tuple(self.queues_labels.keys())}"
+            queue = self.queues_labels[self.queue_name]["queue"]
+
+        route = queue if not override else string
+        route = queue if not route else route
+        route = string if not route else route
+        assert route, "Internal route not set by HandleMsgs class or included as a decorator arg."
+        route = clean_route_string(route)
+
+        log.info(f"{self} routing on '{route}'")
+        if (string and string != route) and isinstance(self, HTTPConsumerLoop):
+            print(f"Note: cosmetic route '{string}' arg passed is not the same as internal route '{route}' being used.", \
+                        "\n (use `override=True` arg on route decorator to change this)")
+
+        return self._decorator(route)
 
     @abstractmethod
-    def _decorator(self, func):
-        async def wrapper(containing_class_self):
-            '''
-            Message processing loop decorator to be added to
-            agent's `start` task.
+    def _decorator(self, string):
+        def wrapper(func):
+            async def wrapped(containing_class_self):
+                '''
+                Message processing loop decorator to be added to
+                agent's `start` task.
 
-            Note: this call includes an object argument (containing_class_self)
-            with the expectation that it will be used inside a class to decorate
-            a class method.
-            '''
-            while True:
-                async for msg in self.consumer:
-                    # Decorated function comes in here
-                    await func(containing_class_self, msg)
+                Note: this call includes an object argument (containing_class_self)
+                with the expectation that it will be used inside a class to decorate
+                a class method.
+                '''
+                while True:
+                    async for msg in self.consumer:
+                        # Decorated function comes in here
+                        await func(containing_class_self, msg)
+            return wrapped
         return wrapper
 
 
-class KafkaConsumerLoop(ConsumerABC):
-    QUEUE_TYPE = "Kafka"
-    '''
-    A class decorator for decorating methods inside a class (bound
-    methods) that need to execute some code when a new Kafka topic
-    message comes in.
 
-    This object currently will not work for decorating an unbound
-    method.
+class KafkaConsumerLoop(ConsumerABC):
     '''
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.topic = self.kwargs["topic"]
-        self.passed_from_agent = self.kwargs.get("passed_from_agent", "")
+    Uses the `AIOKafkaConsumer` decorator class from
+    the aiokafka library to consume messages from a
+    Kafka broker.
+
+    This object currently will not work for decorating
+    an unbound method.
+    '''
+    QUEUE_TYPE = "Kafka"
+
+    def __init__(self, queue_name, queues_labels):
+        super().__init__(queue_name, queues_labels)
+        self.topic = self.queues_labels[queue_name]["queue"]
         self.consumer = AIOKafkaConsumer(
             self.topic,
-            loop=self.loop, bootstrap_servers=HOST,
+            loop=self.loop, bootstrap_servers=KAFKA_HOST,
             key_deserializer=lambda v: v.decode(ENCODING),
             value_deserializer=lambda v: json.loads(v.decode(ENCODING)),
             #group_id="my-group"
         )
 
-    def _decorator(self, func):
-        async def wrapper(containing_class_self):
-            """
-            Message processing loop decorator to be added to `start` task.
+    def _decorator(self, string):
+        def wrapper(func):
+            async def wrapped(containing_class_self):
+                """
+                Message processing loop decorator to be added to `start` task.
 
-            Note: this call includes an object argument (containing_class_self)
-            with the expectation that it will be used inside a class to decorate
-            a class method.
-            """
-            try:
-                await self.consumer.start()
-            except AssertionError as e:
-                print(e, '\ncontinuing...\n')
+                Note: this call includes an object argument (containing_class_self)
+                with the expectation that it will be used inside a class to decorate
+                a class method.
+                """
+                try:
+                    await self.consumer.start()
+                except AssertionError as e:
+                    print(e, '\ncontinuing...\n')
 
-            while True:
-                async for msg in self.consumer:
-                    log.info('Got a message')
-
-                    try:
-                        TOPIC_DICT = getattr(containing_class_self, self.passed_from_agent)
-                        valid_raw_msg = (msg.key == TOPIC_DICT['uuid'])
+                while True:
+                    async for msg in self.consumer:
+                        log.info('Got a message')
+                        valid_raw_msg = (msg.key == self.queues_labels[self.queue_name]['uuid'])
                         log.debug(f"Agent uuid matches Kafka msg key received?: {valid_raw_msg}")
-                    except AttributeError as e:
-                        valid_raw_msg = False
-                        log.debug(f"Message key wasn't passed to \"consumer decorator object\" from agent")
+                        if valid_raw_msg:
+                            msg = msg.value
+                            msg = json.dumps(msg) \
+                                if not isinstance(msg, (str, bytes, bytearray)) \
+                                else msg
 
-                    if valid_raw_msg:
-                        msg = msg.value
-                        msg = json.dumps(msg) \
-                            if not isinstance(msg, (str, bytes, bytearray)) \
-                            else msg
+                            # Decorated function comes in here
+                            await func(containing_class_self, msg)
 
-                        # Decorated function comes in here
-                        await func(containing_class_self, msg)
-
+            return wrapped
         return wrapper
 
 
 class AsyncIOConsumerLoop(ConsumerABC):
+    '''
+    Uses an internal AsyncIO queue to pass messages around.
+    '''
     QUEUE_TYPE = "AsyncIO"
 
-    '''
-    A class decorator for decorating methods inside a class (bound
-    methods) that need to execute some code when a new AsyncIO queue
-    message comes in.
-
-    This object currently will not work for decorating an unbound
-    method.
-    '''
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, queue_name, queues_labels):
+        super().__init__(queue_name, queues_labels)
         self.consumer = self.queue_ref = AsyncioQueue()
 
-    def _decorator(self, func):
-        async def wrapper(containing_class_self):
-            """
-            Message processing loop decorator to be added to `start` task.
+    def _decorator(self, string):
+        def wrapper(func):
+            async def wrapped(containing_class_self):
+                """
+                Message processing loop decorator to be added to `start` task.
 
-            Note: this call includes an object argument (containing_class_self)
-            with the expectation that it will be used inside a class to decorate
-            a class method.
-            """
-            while True:
-                async for msg in self.consumer:
-                    log.info('Got a message')
+                Note: this call includes an object argument (containing_class_self)
+                with the expectation that it will be used inside a class to decorate
+                a class method.
+                """
+                while True:
+                    async for msg in self.consumer:
+                        log.info('Got a message')
 
-                    # Decorated function comes in here
-                    await func(containing_class_self, msg)
+                        # Decorated function comes in here
+                        await func(containing_class_self, msg)
+            return wrapped
         return wrapper
 
 
 class RMQIOConsumerLoop(ConsumerABC):
+    '''
+    Uses the `RMQIOConsumerLoop` decorator class
+    to consumer messages from a RabbitMQ queue.
+    '''
     QUEUE_TYPE = "RabbitMQ"
 
-    '''
-    A class decorator for decorating methods inside a class (bound
-    methods) that need to execute some code when a new AsyncIO queue
-    message comes in.
-
-    This object currently will not work for decorating an unbound
-    method.
-    '''
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.routing_key = self.kwargs["topic"]
+    def __init__(self, queue_name, queues_labels, **kwargs):
+        super().__init__(queue_name, queues_labels, **kwargs)
+        self.routing_key = self.queues_labels[queue_name]["queue"]
 
     async def a_init(self):
         self.connection = self.queue_ref = await aio_pika.connect_robust(
@@ -184,27 +184,57 @@ class RMQIOConsumerLoop(ConsumerABC):
         )   # type: aio_pika.Queue
         self.a_init_ran = True
 
-    def update_attr(self, **kwargs_from_agent):
+    def add_agent_uuid(self, **kwargs_from_agent):
         self.key = kwargs_from_agent[self.QUEUE_TYPE]
         self.routing_key += f"-{self.key[:5]}"
 
-    def _decorator(self, func):
-        async def wrapper(containing_class_self):
-            """
-            Message processing loop decorator to be added to `start` task.
+    def _decorator(self, string):
+        def wrapper(func):
+            async def wrapped(containing_class_self):
+                """
+                Message processing loop decorator to be added to `start` task.
 
-            Note: this call includes an object argument (containing_class_self)
-            with the expectation that it will be used inside a class to decorate
-            a class method.
-            """
-            async with self.connection, \
-                       self.queue.iterator() as consumer:
-                # Cancel consuming after __aexit__
-                async for msg in consumer:
-                    async with msg.process():
-                        msg = msg.body
+                Note: this call includes an object argument (containing_class_self)
+                with the expectation that it will be used inside a class to decorate
+                a class method.
+                """
+                async with self.connection, \
+                        self.queue.iterator() as consumer:
+                    # Cancel consuming after __aexit__
+                    async for msg in consumer:
+                        async with msg.process():
+                            msg = msg.body
 
-                        # Decorated function comes in here
-                        await func(containing_class_self, msg)
+                            # Decorated function comes in here
+                            await func(containing_class_self, msg)
 
+            return wrapped
         return wrapper
+
+
+class HTTPConsumerLoop(ConsumerABC):
+    '''
+    Uses the `RMQIOConsumerLoop` decorator class
+    to consumer messages from a RabbitMQ queue.
+    '''
+    QUEUE_TYPE = "HTTP"
+
+    QUEUE_HTTP_ROUTES = ClassRouteTableDef()
+    QUEUE_HTTP_PORT = get_free_port()
+
+
+    def __init__(self, queue_name="", queues_labels={}, **kwargs):
+        super().__init__(queue_name, queues_labels, **kwargs)
+        self.routes = self.QUEUE_HTTP_ROUTES
+        self.port = kwargs.get("port", self.QUEUE_HTTP_PORT)
+        self.queue_ref = self.port
+        log.info(f"{self} routing on port '{self.port}'")
+
+    async def a_init(self):
+        self.a_init_ran = True
+
+    def add_agent_uuid(self, **kwargs_from_agent):
+        pass
+
+    def _decorator(self, string):
+        return self.routes.post(string)

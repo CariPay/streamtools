@@ -1,6 +1,7 @@
 import aiohttp
 import asyncio
 import json
+import logging
 import os
 import requests
 import time
@@ -10,22 +11,8 @@ from abc import ABC, abstractmethod
 from kafka import KafkaProducer as ProducerFromKafka
 import aio_pika
 
-from logger import log
-
-POST_HOST = os.environ['POST_HOST']
-HOST = os.environ['KAFKA_HOST']
-ENCODING = os.environ['ENCODING']
-
-HEADERS = {
-    "JSON": {'content-type': 'application/json'},
-    "SSI": {'content-type': 'application/ssi-agent-wire'}
-}
-async def send_message_via_post(url, msg, headers):
-    async with aiohttp.ClientSession() as session, \
-               session.post(url, data=msg, headers=headers) as resp:
-        if resp.status != 202:
-            print(resp.status)
-            print(await resp.text())
+from .libs import log, clean_route_string
+from .libs import HTTP_HOST,KAFKA_HOST, ENCODING
 
 
 class ProducerABC(ABC):
@@ -34,15 +21,17 @@ class ProducerABC(ABC):
     Abstract base class to be used for all other producers
     classes to interact with Kafka.
     '''
-    def __init__(self, **kwargs):
+    def __init__(self, queue_name, queues_labels={}):
         assert hasattr(self, 'QUEUE_TYPE'), "'QUEUE_TYPE' not defined in class."
-        self.kwargs = kwargs
+        self.queue_name = queue_name
+        self.queues_labels = queues_labels
         self._queue_from_consumer = None
+        self.key = ""
 
     async def a_init(self):
         pass
 
-    def update_attr(self, **kwargs_from_agent):
+    def add_agent_uuid(self, **kwargs_from_agent):
         pass
 
     @property
@@ -57,24 +46,29 @@ class ProducerABC(ABC):
         log.info(f"Producer: {self}")
 
     @abstractmethod
-    def send(self, msg):
+    async def send(self, msg, *args, **kwargs):
         pass
 
 
 
 class KafkaProducer(ProducerABC):
+    '''
+    Uses the `KafkaProducer` class from the
+    aiokafka library to publish messages
+    directly to a Kafka broker.
+    '''
     QUEUE_TYPE = "Kafka"
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.topic = self.kwargs["topic"]
+    def __init__(self, queue_name, queues_labels):
+        super().__init__(queue_name, queues_labels)
+        self.topic = self.queues_labels[queue_name]["queue"]
 
         start = time.time()
         log.info(f"Starting kafka producer for '{self.topic}' topic")
         self._producer = ProducerFromKafka(
             acks=1,
             batch_size=1,  # @TODO: config-able
-            bootstrap_servers=HOST,
+            bootstrap_servers=KAFKA_HOST,
             api_version=(1, 0, 0),
             key_serializer=lambda v: str(v).encode(ENCODING),
             value_serializer=lambda v: json.dumps(v).encode(ENCODING)
@@ -82,10 +76,10 @@ class KafkaProducer(ProducerABC):
         end = time.time()
         log.info(f"Got '{self.topic}' kafka producer in {round(end - start, 2)}s!")
 
-    def update_attr(self, **kwargs_from_agent):
+    def add_agent_uuid(self, **kwargs_from_agent):
         self.key = kwargs_from_agent[self.QUEUE_TYPE]
 
-    def send(self, message):
+    def send(self, message, *args, **kwargs):
         try:
             # @TODO: pack message
 
@@ -110,55 +104,98 @@ class KafkaProducer(ProducerABC):
 
             return None
 
-class POSTProducer(ProducerABC):
-    QUEUE_TYPE = "Kafka"
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.topic = self.kwargs["topic"]
+class HTTPProducer(ProducerABC):
+    '''
+    "Uses an external Kafka producer service to
+    have messages sent to the Kafka broker to be
+    added to the queues. Messages are sent out as
+    POST requests to the service's endpoint with
+    two required fields:\n
+    \"msg_topic\": for the relevant kafka topic queue\n
+    \"msg_key\": to link back messages to the agent
+    '''
+    QUEUE_TYPE = ("Kafka", "RabbitMQ", "HTTP")
 
-    def update_attr(self, **kwargs_from_agent):
-        self.key = kwargs_from_agent[self.QUEUE_TYPE]
+    HEADERS = {
+        "JSON": {'content-type': 'application/json'},
+        "SSI": {'content-type': 'application/ssi-agent-wire'}
+    }
 
-    async def send(self, msg):
-        endpoint = f"http://{POST_HOST}/send"
-        if isinstance(msg, str):
+    def __init__(self, queue_name="", queues_labels={}):
+        super().__init__(queue_name, queues_labels)
+        self.topic = self.queues_labels[queue_name]["queue"] if queue_name in self.queues_labels else ""
+        self.route = clean_route_string(self.topic)
+        self.host = HTTP_HOST
+
+    async def a_init(self):
+        self.ip = "localhost"
+        self.port = self.queue_from_consumer
+        self.host = f"{self.ip}:{self.port}"
+
+    def add_agent_uuid(self, **kwargs_from_agent):
+        self.key = kwargs_from_agent[self.QUEUE_TYPE[0]]
+
+    def _add_class_attrs_to_msg(self, msg):
+        if isinstance(msg, (str, bytes, bytearray)):
             msg = json.loads(msg)
         msg["msg_key"] = self.key
         msg["msg_topic"] = self.topic
-        msg = json.dumps(msg)
+        return json.dumps(msg)
 
-        await send_message_via_post(endpoint, msg, HEADERS["JSON"])
+    async def send_message_via_aiohttp(self, url, msg, headers, method="post"):
+        async with aiohttp.ClientSession() as session:
+            send_request = session.post if method=="post" else session.get
+            async with send_request(url, data=msg, headers=headers) as resp:
+                if resp.status != 202:
+                    log.info(f"Response: ({resp.status}) {await resp.text()}")
+
+    async def send(self, msg, method="post", *args, **kwargs):
+        endpoint = kwargs.get("endpoint", f"http://{self.host}/{self.route[1:]}")
+        headers_tag = kwargs.get("headers", "JSON")
+        headers = self.HEADERS.get(headers_tag, self.HEADERS["JSON"])
+
+        msg = self._add_class_attrs_to_msg(msg)
+        await self.send_message_via_aiohttp(url=endpoint, msg=msg, headers=headers, method=method)
+
 
 class AsyncIOProducer(ProducerABC):
+    '''
+    Uses an internal AsyncIO queue to pass messages around.
+    '''
     QUEUE_TYPE = "AsyncIO"
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, queue_name, queues_labels):
+        super().__init__(queue_name, queues_labels)
         self.producer = None
 
-    async def send(self, msg):
+    async def send(self, msg, *args, **kwargs):
         assert self.producer != None, \
             "Producer queue object is not set"
         await self.producer.put(msg)
 
+
 class RMQIOProducer(ProducerABC):
+    '''
+    Uses an external RabbitMQ broker queue to pass
+    messages around.
+    '''
     QUEUE_TYPE = "RabbitMQ"
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, queue_name, queues_labels):
+        super().__init__(queue_name, queues_labels)
         self.loop = asyncio.get_event_loop()
-        self.routing_key = self.kwargs["topic"]
+        self.routing_key = self.queues_labels[queue_name]["queue"]
 
     async def a_init(self):
         self.connection = self.queue_from_consumer
         self.channel = await self.connection.channel()
 
-    def update_attr(self, **kwargs_from_agent):
+    def add_agent_uuid(self, **kwargs_from_agent):
         self.key = kwargs_from_agent[self.QUEUE_TYPE]
         self.routing_key += f"-{self.key[:5]}"
 
-    async def send(self, msg):
+    async def send(self, msg, *args, **kwargs):
         await self.channel.default_exchange.publish(
             aio_pika.Message(
                 body=msg.encode()
