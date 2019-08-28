@@ -24,6 +24,10 @@ class ConsumerABC(ABC):
     def __init__(self, queue_name, queues_labels={}, **kwargs):
         self.queue_name = queue_name
         self.queues_labels = queues_labels
+        self.queue_label = (self.queues_labels
+                                .get(queue_name, {})
+                                .get("queue", queue_name))
+
         self.loop = asyncio.get_event_loop()
         self.consumer = None
         self.a_init_ran = False
@@ -36,10 +40,7 @@ class ConsumerABC(ABC):
         pass
 
     def __call__(self, string="", override=False, *args, **kwargs):
-        queue = ""
-        if self.queue_name:
-            assert self.queue_name in self.queues_labels, f"'queue_name' arg must be one of {tuple(self.queues_labels.keys())}"
-            queue = self.queues_labels[self.queue_name]["queue"]
+        queue = self.queue_label if self.queue_label else ""
 
         route = queue if not override else string
         route = queue if not route else route
@@ -84,9 +85,7 @@ class KafkaConsumerLoop(ConsumerABC):
 
     def __init__(self, queue_name, queues_labels={}):
         super().__init__(queue_name, queues_labels)
-        self.topic = (self.queues_labels
-                                .get(queue_name, {})
-                                .get("queue", queue_name))
+        self.topic = self.queue_label
         self.consumer = AIOKafkaConsumer(
             self.topic,
             loop=self.loop, bootstrap_servers=KAFKA_HOST,
@@ -159,9 +158,7 @@ class RMQIOConsumerLoop(ConsumerABC):
 
     def __init__(self, queue_name, queues_labels={}, **kwargs):
         super().__init__(queue_name, queues_labels, **kwargs)
-        self.routing_key = (self.queues_labels
-                                .get(queue_name, {})
-                                .get("queue", queue_name))
+        self.routing_key = self.queue_label
 
     async def a_init(self):
         self.connection = self.queue_ref = await aio_pika.connect_robust(
