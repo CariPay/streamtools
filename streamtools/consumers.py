@@ -56,7 +56,7 @@ class ConsumerABC(ABC):
         return self._decorator(route, *args, **kwargs)
 
     @abstractmethod
-    def _decorator(self, string):
+    def _decorator(self, string, *args, **kwargs):
         def wrapper(func):
             async def wrapped(*args):
                 '''
@@ -94,7 +94,7 @@ class KafkaConsumerLoop(ConsumerABC):
             #group_id="my-group"
         )
 
-    def _decorator(self, string):
+    def _decorator(self, string, *args, **kwargs):
         def wrapper(func):
             async def wrapped(*args):
                 """
@@ -133,7 +133,7 @@ class AsyncIOConsumerLoop(ConsumerABC):
         super().__init__(queue_name, queues_labels)
         self.consumer = self.queue_ref = AsyncioQueue()
 
-    def _decorator(self, string):
+    def _decorator(self, string, *args, **kwargs):
         def wrapper(func):
             async def wrapped(*args):
                 """
@@ -178,7 +178,7 @@ class RMQIOConsumerLoop(ConsumerABC):
         self.key = kwargs_from_agent[self.QUEUE_TYPE]
         self.routing_key += f"-{self.key[:5]}"
 
-    def _decorator(self, string):
+    def _decorator(self, string, *args, **kwargs):
         def wrapper(func):
             async def wrapped(*args):
                 """
