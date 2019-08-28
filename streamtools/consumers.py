@@ -229,10 +229,11 @@ class HTTPConsumerLoop(ConsumerABC):
     def add_agent_uuid(self, **kwargs_from_agent):
         pass
 
-    def _decorator(self, string):
+    def _decorator(self, string, method="post"):
         routes_methods = {
             "get": self.routes.get,
             "post": self.routes.post,
         }
+        self.method = method
         route_send = routes_methods.get(self.method, routes_methods[self.default_method])
         return route_send(string)
