@@ -7,6 +7,7 @@ import time
 import traceback
 from abc import ABC, abstractmethod
 
+from aiohttp import web
 from aiokafka import AIOKafkaConsumer
 import aio_pika
 
@@ -20,7 +21,7 @@ class ConsumerABC(ABC):
     for consuming input messages sent to the agent and messages
     produced internally.
     '''
-    def __init__(self, queue_name, queues_labels={}):
+    def __init__(self, queue_name, queues_labels={}, **kwargs):
         self.queue_name = queue_name
         self.queues_labels = queues_labels
         self.loop = asyncio.get_event_loop()
@@ -56,19 +57,15 @@ class ConsumerABC(ABC):
     @abstractmethod
     def _decorator(self, string):
         def wrapper(func):
-            async def wrapped(containing_class_self):
+            async def wrapped(*args):
                 '''
                 Message processing loop decorator to be added to
                 agent's `start` task.
-
-                Note: this call includes an object argument (containing_class_self)
-                with the expectation that it will be used inside a class to decorate
-                a class method.
                 '''
                 while True:
                     async for msg in self.consumer:
                         # Decorated function comes in here
-                        await func(containing_class_self, msg)
+                        await func(*args, msg)
             return wrapped
         return wrapper
 
@@ -98,13 +95,9 @@ class KafkaConsumerLoop(ConsumerABC):
 
     def _decorator(self, string):
         def wrapper(func):
-            async def wrapped(containing_class_self):
+            async def wrapped(*args):
                 """
                 Message processing loop decorator to be added to `start` task.
-
-                Note: this call includes an object argument (containing_class_self)
-                with the expectation that it will be used inside a class to decorate
-                a class method.
                 """
                 try:
                     await self.consumer.start()
@@ -123,7 +116,7 @@ class KafkaConsumerLoop(ConsumerABC):
                                 else msg
 
                             # Decorated function comes in here
-                            await func(containing_class_self, msg)
+                            await func(*args, msg)
 
             return wrapped
         return wrapper
@@ -141,20 +134,16 @@ class AsyncIOConsumerLoop(ConsumerABC):
 
     def _decorator(self, string):
         def wrapper(func):
-            async def wrapped(containing_class_self):
+            async def wrapped(*args):
                 """
                 Message processing loop decorator to be added to `start` task.
-
-                Note: this call includes an object argument (containing_class_self)
-                with the expectation that it will be used inside a class to decorate
-                a class method.
                 """
                 while True:
                     async for msg in self.consumer:
                         log.info('Got a message')
 
                         # Decorated function comes in here
-                        await func(containing_class_self, msg)
+                        await func(*args, msg)
             return wrapped
         return wrapper
 
@@ -190,13 +179,9 @@ class RMQIOConsumerLoop(ConsumerABC):
 
     def _decorator(self, string):
         def wrapper(func):
-            async def wrapped(containing_class_self):
+            async def wrapped(*args):
                 """
                 Message processing loop decorator to be added to `start` task.
-
-                Note: this call includes an object argument (containing_class_self)
-                with the expectation that it will be used inside a class to decorate
-                a class method.
                 """
                 async with self.connection, \
                         self.queue.iterator() as consumer:
@@ -206,7 +191,7 @@ class RMQIOConsumerLoop(ConsumerABC):
                             msg = msg.body
 
                             # Decorated function comes in here
-                            await func(containing_class_self, msg)
+                            await func(*args, msg)
 
             return wrapped
         return wrapper
@@ -223,12 +208,20 @@ class HTTPConsumerLoop(ConsumerABC):
     QUEUE_HTTP_PORT = get_free_port()
 
 
-    def __init__(self, queue_name="", queues_labels={}, **kwargs):
+    def __init__(self, queue_name="", queues_labels={}, in_class=True, **kwargs):
         super().__init__(queue_name, queues_labels, **kwargs)
+
+        if not in_class:
+            self.QUEUE_HTTP_ROUTES = web.RouteTableDef()
         self.routes = self.QUEUE_HTTP_ROUTES
+
         self.port = kwargs.get("port", self.QUEUE_HTTP_PORT)
         self.queue_ref = self.port
         log.info(f"{self} routing on port '{self.port}'")
+
+        self.default_method = "post"
+        self.method = kwargs.get("method", self.default_method).lower()
+
 
     async def a_init(self):
         self.a_init_ran = True
@@ -237,4 +230,9 @@ class HTTPConsumerLoop(ConsumerABC):
         pass
 
     def _decorator(self, string):
-        return self.routes.post(string)
+        routes_methods = {
+            "get": self.routes.get,
+            "post": self.routes.post,
+        }
+        route_send = routes_methods.get(self.method, routes_methods[self.default_method])
+        return route_send(string)
