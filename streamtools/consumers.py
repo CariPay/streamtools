@@ -82,9 +82,11 @@ class KafkaConsumerLoop(ConsumerABC):
     '''
     QUEUE_TYPE = "Kafka"
 
-    def __init__(self, queue_name, queues_labels):
+    def __init__(self, queue_name, queues_labels={}):
         super().__init__(queue_name, queues_labels)
-        self.topic = self.queues_labels[queue_name]["queue"]
+        self.topic = (self.queues_labels
+                                .get(queue_name, {})
+                                .get("queue", queue_name))
         self.consumer = AIOKafkaConsumer(
             self.topic,
             loop=self.loop, bootstrap_servers=KAFKA_HOST,
@@ -128,7 +130,7 @@ class AsyncIOConsumerLoop(ConsumerABC):
     '''
     QUEUE_TYPE = "AsyncIO"
 
-    def __init__(self, queue_name, queues_labels):
+    def __init__(self, queue_name, queues_labels={}):
         super().__init__(queue_name, queues_labels)
         self.consumer = self.queue_ref = AsyncioQueue()
 
@@ -155,9 +157,11 @@ class RMQIOConsumerLoop(ConsumerABC):
     '''
     QUEUE_TYPE = "RabbitMQ"
 
-    def __init__(self, queue_name, queues_labels, **kwargs):
+    def __init__(self, queue_name, queues_labels={}, **kwargs):
         super().__init__(queue_name, queues_labels, **kwargs)
-        self.routing_key = self.queues_labels[queue_name]["queue"]
+        self.routing_key = (self.queues_labels
+                                .get(queue_name, {})
+                                .get("queue", queue_name))
 
     async def a_init(self):
         self.connection = self.queue_ref = await aio_pika.connect_robust(
