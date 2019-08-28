@@ -215,12 +215,11 @@ class HTTPConsumerLoop(ConsumerABC):
             self.QUEUE_HTTP_ROUTES = web.RouteTableDef()
         self.routes = self.QUEUE_HTTP_ROUTES
 
+        self.default_method = "post"
+
         self.port = kwargs.get("port", self.QUEUE_HTTP_PORT)
         self.queue_ref = self.port
         log.info(f"{self} routing on port '{self.port}'")
-
-        self.default_method = "post"
-        self.method = kwargs.get("method", self.default_method).lower()
 
 
     async def a_init(self):
@@ -234,6 +233,5 @@ class HTTPConsumerLoop(ConsumerABC):
             "get": self.routes.get,
             "post": self.routes.post,
         }
-        self.method = method
-        route_send = routes_methods.get(self.method, routes_methods[self.default_method])
+        route_send = routes_methods.get(method.lower(), routes_methods[self.default_method])
         return route_send(string)
