@@ -35,7 +35,7 @@ class ConsumerABC(ABC):
     def add_agent_uuid(self, **kwargs_from_agent):
         pass
 
-    def __call__(self, string="", override=False):
+    def __call__(self, string="", override=False, *args, **kwargs):
         queue = ""
         if self.queue_name:
             assert self.queue_name in self.queues_labels, f"'queue_name' arg must be one of {tuple(self.queues_labels.keys())}"
@@ -52,7 +52,7 @@ class ConsumerABC(ABC):
             print(f"Note: cosmetic route '{string}' arg passed is not the same as internal route '{route}' being used.", \
                         "\n (use `override=True` arg on route decorator to change this)")
 
-        return self._decorator(route)
+        return self._decorator(route, *args, **kwargs)
 
     @abstractmethod
     def _decorator(self, string):
