@@ -213,8 +213,8 @@ class HTTPConsumerLoop(ConsumerABC):
         super().__init__(queue_name, queues_labels, **kwargs)
 
         if not in_class:
-            self.QUEUE_HTTP_ROUTES = web.RouteTableDef()
-        self.routes = self.QUEUE_HTTP_ROUTES
+            HTTPConsumerLoop.QUEUE_HTTP_ROUTES = web.RouteTableDef()
+        self.routes = HTTPConsumerLoop.QUEUE_HTTP_ROUTES
 
         self.default_method = "post"
 
