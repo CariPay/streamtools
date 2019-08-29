@@ -14,8 +14,6 @@ import aio_pika
 from .libs import log, clean_route_string, get_free_port, AsyncioQueue, ClassRouteTableDef
 from .libs import ENCODING, RMQ_USER, RMQ_PASS, RMQ_HOST, KAFKA_HOST
 
-QUEUE_HTTP_ROUTES = ClassRouteTableDef()
-
 
 class ConsumerABC(ABC):
     '''
@@ -207,20 +205,21 @@ class HTTPConsumerLoop(ConsumerABC):
     '''
     QUEUE_TYPE = "HTTP"
 
-    QUEUE_HTTP_ROUTES = QUEUE_HTTP_ROUTES
-    QUEUE_HTTP_PORT = get_free_port()
+    CLASS_ROUTES = ClassRouteTableDef()
+    ROUTES = web.RouteTableDef()
+
+    PORT = get_free_port()
 
 
     def __init__(self, queue_name="", queues_labels={}, in_class=True, **kwargs):
         super().__init__(queue_name, queues_labels, **kwargs)
 
-        if not in_class:
-            HTTPConsumerLoop.QUEUE_HTTP_ROUTES = web.RouteTableDef()
-        self.routes = HTTPConsumerLoop.QUEUE_HTTP_ROUTES
+        self.routes = HTTPConsumerLoop.CLASS_ROUTES if in_class \
+                        else HTTPConsumerLoop.ROUTES
 
         self.default_method = "post"
 
-        self.port = kwargs.get("port", self.QUEUE_HTTP_PORT)
+        self.port = kwargs.get("port", self.PORT)
         self.queue_ref = self.port
         log.info(f"{self} routing on port '{self.port}'")
 
