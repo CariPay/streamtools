@@ -177,7 +177,7 @@ class ConsumerRunner:
     async def app(self):
 
         routes = await self._extract_routes_from_consumers(self.consumers)
-        site = await prepare_aiohttp_app(app=webapp, routes=routes, port=self.port)
+        site = await prepare_aiohttp_app(app=self.webapp, routes=routes, port=self.port)
 
         if not (self.consumers and self.handlers):
             print("No consumers passed to run function. Exiting...")
@@ -188,7 +188,7 @@ class ConsumerRunner:
         else:
             queue_type = f"{self.consumers[0].QUEUE_TYPE} Handler"
             print(f"===== Starting HANDLER on: {queue_type} =====")
-            await asyncio.gather(*[handler() for handler in handlers])
+            await asyncio.gather(*[handler() for handler in self.handlers])
 
 
     def run(self):
