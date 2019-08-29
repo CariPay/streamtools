@@ -83,8 +83,8 @@ class KafkaConsumerLoop(ConsumerABC):
     '''
     QUEUE_TYPE = "Kafka"
 
-    def __init__(self, queue_name, queues_labels={}):
-        super().__init__(queue_name, queues_labels)
+    def __init__(self, queue_name, queues_labels={}, **kwargs):
+        super().__init__(queue_name, queues_labels, **kwargs)
         self.topic = self.queue_label
         self.consumer = AIOKafkaConsumer(
             self.topic,
@@ -129,8 +129,8 @@ class AsyncIOConsumerLoop(ConsumerABC):
     '''
     QUEUE_TYPE = "AsyncIO"
 
-    def __init__(self, queue_name, queues_labels={}):
-        super().__init__(queue_name, queues_labels)
+    def __init__(self, queue_name, queues_labels={}, **kwargs):
+        super().__init__(queue_name, queues_labels, **kwargs)
         self.consumer = self.queue_ref = AsyncioQueue()
 
     def _decorator(self, string, *args, **kwargs):

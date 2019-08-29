@@ -1,3 +1,4 @@
+import asyncio
 from aiohttp import web
 
 from .consumers import \
@@ -12,6 +13,7 @@ from .producers import \
     AsyncIOProducer, \
     RMQIOProducer
 
+from .libs import prepare_aiohttp_app
 
 CONSUMER_LOOPS = {
     "KafkaHandler": KafkaConsumerLoop,
@@ -152,3 +154,44 @@ class HandlerFactory:
                 break
 
         return config
+
+class ConsumerRunner:
+
+    WEBAPP = web.Application()
+
+    def __init__(self, consumers=None, handlers=None, port=9000):
+        self.consumers = consumers
+        self.handlers = handlers
+        self.port = port
+        self.webapp = ConsumerRunner.WEBAPP
+
+
+    async def _extract_routes_from_consumers(self, consumers):
+        routes = None
+        for consumer in consumers:
+            await consumer.a_init()
+            if not routes:
+                routes = getattr(consumer, "routes", None)
+        return routes
+
+    async def app(self):
+
+        routes = await self._extract_routes_from_consumers(self.consumers)
+        site = await prepare_aiohttp_app(app=webapp, routes=routes, port=self.port)
+
+        if not (self.consumers and self.handlers):
+            print("No consumers passed to run function. Exiting...")
+            asyncio.get_running_loop().stop()
+        elif site:
+            print(f"===== Starting HANDLER on: http://localhost:{self.port} =====")
+            await site.start()
+        else:
+            queue_type = f"{self.consumers[0].QUEUE_TYPE} Handler"
+            print(f"===== Starting HANDLER on: {queue_type} =====")
+            await asyncio.gather(*[handler() for handler in handlers])
+
+
+    def run(self):
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(self.app())
+        loop.run_forever()
