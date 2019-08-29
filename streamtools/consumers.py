@@ -14,6 +14,8 @@ import aio_pika
 from .libs import log, clean_route_string, get_free_port, AsyncioQueue, ClassRouteTableDef
 from .libs import ENCODING, RMQ_USER, RMQ_PASS, RMQ_HOST, KAFKA_HOST
 
+QUEUE_HTTP_ROUTES = ClassRouteTableDef()
+
 
 class ConsumerABC(ABC):
     '''
@@ -205,7 +207,7 @@ class HTTPConsumerLoop(ConsumerABC):
     '''
     QUEUE_TYPE = "HTTP"
 
-    QUEUE_HTTP_ROUTES = ClassRouteTableDef()
+    QUEUE_HTTP_ROUTES = QUEUE_HTTP_ROUTES
     QUEUE_HTTP_PORT = get_free_port()
 
 
