@@ -35,7 +35,7 @@ def get_free_port():
     return port
 
 
-async def prepare_aiohttp_app(app=None, routes=None, port=None, handler_group=None, classes=[]):
+async def prepare_aiohttp_app(app=None, routes=None, port=None, handler_group=None, classes=[], host=None):
     if handler_group:
         app, routes, port = getattr(handler_group, "web_app_config", (None, None, None))
     required = [app is not None, routes is not None, port]
@@ -49,7 +49,7 @@ async def prepare_aiohttp_app(app=None, routes=None, port=None, handler_group=No
     runner = web.AppRunner(app)
     await runner.setup()
 
-    return web.TCPSite(runner=runner, port=port)
+    return web.TCPSite(runner=runner, host=host, port=port)
 
 
 class AsyncioQueue(asyncio.Queue):

@@ -159,10 +159,11 @@ class ConsumerRunner:
 
     WEBAPP = web.Application()
 
-    def __init__(self, consumers=None, handlers=None, port=9000):
+    def __init__(self, consumers=None, handlers=None, port=9000, host=None):
         self.consumers = consumers
         self.handlers = handlers
         self.port = port
+        self.host = host
         self.webapp = ConsumerRunner.WEBAPP
 
 
@@ -177,7 +178,7 @@ class ConsumerRunner:
     async def app(self):
 
         routes = await self._extract_routes_from_consumers(self.consumers)
-        site = await prepare_aiohttp_app(app=self.webapp, routes=routes, port=self.port)
+        site = await prepare_aiohttp_app(app=self.webapp, routes=routes, port=self.port, host=self.host)
 
         if not (self.consumers and self.handlers):
             print("No consumers passed to run function. Exiting...")
