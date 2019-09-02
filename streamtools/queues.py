@@ -13,7 +13,7 @@ from .producers import \
     AsyncIOProducer, \
     RMQIOProducer
 
-from .libs import prepare_aiohttp_app
+from .libs import prepare_aiohttp_app, check_queue_type
 
 CONSUMER_LOOPS = {
     "KafkaHandler": KafkaConsumerLoop,
@@ -50,10 +50,7 @@ class HandleMsgs:
         assert config_check, \
             f"Invalid config passed. Please make sure args are one of: {CONFIG_OPTIONS}"
 
-        cons_type, prod_type = tuple(
-            (_type,) if isinstance(_type, str) else _type \
-                for _type in self.types
-        )
+        cons_type, prod_type = self.types
         type_check = set(cons_type) & set(prod_type)   # compare both collections for common elements
         assert type_check, \
             f"Incompatible queue types passed: {self.types}"
@@ -86,9 +83,11 @@ class HandleMsgs:
 
     @property
     def types(self):
-        consumer_loop_type = self.consumer_loops_dict[self.consumer_loop_label].QUEUE_TYPE
-        producer_type = self.producers_dict[self.producer_label].QUEUE_TYPE
-        return consumer_loop_type, producer_type
+        consumer_loop_class = self.consumer_loops_dict[self.consumer_loop_label]
+        check_queue_type(consumer_loop_class)
+        producer_class = self.producers_dict[self.producer_label]
+        check_queue_type(producer_class)
+        return consumer_loop_class.QUEUE_TYPE, producer_class.QUEUE_TYPE
 
     def set_consumer_loop(self):
         ConsumerLoopClass = self.consumer_loops_dict[self.consumer_loop_label]

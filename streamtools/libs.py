@@ -44,6 +44,7 @@ async def prepare_aiohttp_app(app=None, routes=None, port=None, handler_group=No
 
     if classes and hasattr(routes, "add_class_routes"):
         routes.add_class_routes(classes)
+
     app.add_routes(routes)
 
     runner = web.AppRunner(app)
@@ -51,6 +52,12 @@ async def prepare_aiohttp_app(app=None, routes=None, port=None, handler_group=No
 
     return web.TCPSite(runner=runner, host=host, port=port)
 
+def check_queue_type(obj):
+    assert hasattr(obj, 'QUEUE_TYPE'), "'QUEUE_TYPE' not defined in class."
+
+    assert all( isinstance(obj.QUEUE_TYPE, (list, tuple)) and \
+                isinstance(queue_type, str) for queue_type in obj.QUEUE_TYPE ), \
+                "Class's 'QUEUE_TYPE' must be a collection of strings."
 
 class AsyncioQueue(asyncio.Queue):
     def __aiter__(self): return self

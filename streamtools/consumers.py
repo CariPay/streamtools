@@ -1,4 +1,5 @@
 import asyncio
+from functools import wraps
 import json
 import logging
 import os
@@ -11,7 +12,7 @@ from aiohttp import web
 from aiokafka import AIOKafkaConsumer
 import aio_pika
 
-from .libs import log, clean_route_string, get_free_port, AsyncioQueue, ClassRouteTableDef
+from .libs import log, clean_route_string, get_free_port, check_queue_type, AsyncioQueue, ClassRouteTableDef
 from .libs import ENCODING, RMQ_USER, RMQ_PASS, RMQ_HOST, KAFKA_HOST
 
 
@@ -21,7 +22,10 @@ class ConsumerABC(ABC):
     for consuming input messages sent to the agent and messages
     produced internally.
     '''
+    QUEUE_TYPE = [""]
+
     def __init__(self, queue_name, queues_labels={}, **kwargs):
+        check_queue_type(self)
         self.queue_name = queue_name
         self.queues_labels = queues_labels
         self.queue_label = (self.queues_labels
@@ -58,6 +62,7 @@ class ConsumerABC(ABC):
     @abstractmethod
     def _decorator(self, string, *args, **kwargs):
         def wrapper(func):
+            @wraps(func)
             async def wrapped(*args):
                 '''
                 Message processing loop decorator to be added to
@@ -81,7 +86,7 @@ class KafkaConsumerLoop(ConsumerABC):
     This object currently will not work for decorating
     an unbound method.
     '''
-    QUEUE_TYPE = "Kafka"
+    QUEUE_TYPE = ["Kafka"]
 
     def __init__(self, queue_name, queues_labels={}, **kwargs):
         super().__init__(queue_name, queues_labels, **kwargs)
@@ -96,6 +101,7 @@ class KafkaConsumerLoop(ConsumerABC):
 
     def _decorator(self, string, *args, **kwargs):
         def wrapper(func):
+            @wraps(func)
             async def wrapped(*args):
                 """
                 Message processing loop decorator to be added to `start` task.
@@ -127,7 +133,7 @@ class AsyncIOConsumerLoop(ConsumerABC):
     '''
     Uses an internal AsyncIO queue to pass messages around.
     '''
-    QUEUE_TYPE = "AsyncIO"
+    QUEUE_TYPE = ["AsyncIO"]
 
     def __init__(self, queue_name, queues_labels={}, **kwargs):
         super().__init__(queue_name, queues_labels, **kwargs)
@@ -135,6 +141,7 @@ class AsyncIOConsumerLoop(ConsumerABC):
 
     def _decorator(self, string, *args, **kwargs):
         def wrapper(func):
+            @wraps(func)
             async def wrapped(*args):
                 """
                 Message processing loop decorator to be added to `start` task.
@@ -154,7 +161,7 @@ class RMQIOConsumerLoop(ConsumerABC):
     Uses the `RMQIOConsumerLoop` decorator class
     to consumer messages from a RabbitMQ queue.
     '''
-    QUEUE_TYPE = "RabbitMQ"
+    QUEUE_TYPE = ["RabbitMQ"]
 
     def __init__(self, queue_name, queues_labels={}, **kwargs):
         super().__init__(queue_name, queues_labels, **kwargs)
@@ -180,6 +187,7 @@ class RMQIOConsumerLoop(ConsumerABC):
 
     def _decorator(self, string, *args, **kwargs):
         def wrapper(func):
+            @wraps(func)
             async def wrapped(*args):
                 """
                 Message processing loop decorator to be added to `start` task.
@@ -203,7 +211,7 @@ class HTTPConsumerLoop(ConsumerABC):
     Uses the `RMQIOConsumerLoop` decorator class
     to consumer messages from a RabbitMQ queue.
     '''
-    QUEUE_TYPE = "HTTP"
+    QUEUE_TYPE = ["HTTP"]
 
     CLASS_ROUTES = ClassRouteTableDef()
     ROUTES = web.RouteTableDef()

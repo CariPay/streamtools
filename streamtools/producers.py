@@ -11,20 +11,25 @@ from abc import ABC, abstractmethod
 from kafka import KafkaProducer as ProducerFromKafka
 import aio_pika
 
-from .libs import log, clean_route_string
+from .libs import log, clean_route_string, check_queue_type
 from .libs import HTTP_HOST,KAFKA_HOST, ENCODING
 
 
 class ProducerABC(ABC):
-    QUEUE_TYPE = ""
     '''
     Abstract base class to be used for all other producers
     classes to interact with Kafka.
     '''
+    QUEUE_TYPE = [""]
+
     def __init__(self, queue_name, queues_labels={}):
-        assert hasattr(self, 'QUEUE_TYPE'), "'QUEUE_TYPE' not defined in class."
+        check_queue_type(self)
         self.queue_name = queue_name
         self.queues_labels = queues_labels
+        self.queue_label = (self.queues_labels
+                                .get(queue_name, {})
+                                .get("queue", queue_name))
+
         self._queue_from_consumer = None
         self.key = ""
 
@@ -57,11 +62,11 @@ class KafkaProducer(ProducerABC):
     aiokafka library to publish messages
     directly to a Kafka broker.
     '''
-    QUEUE_TYPE = "Kafka"
+    QUEUE_TYPE = ["Kafka"]
 
     def __init__(self, queue_name, queues_labels):
         super().__init__(queue_name, queues_labels)
-        self.topic = self.queues_labels[queue_name]["queue"]
+        self.topic = self.queue_label
 
         start = time.time()
         log.info(f"Starting kafka producer for '{self.topic}' topic")
@@ -115,7 +120,7 @@ class HTTPProducer(ProducerABC):
     \"msg_topic\": for the relevant kafka topic queue\n
     \"msg_key\": to link back messages to the agent
     '''
-    QUEUE_TYPE = ("Kafka", "RabbitMQ", "HTTP")
+    QUEUE_TYPE = ["Kafka", "RabbitMQ", "HTTP"]
 
     HEADERS = {
         "JSON": {'content-type': 'application/json'},
@@ -124,7 +129,7 @@ class HTTPProducer(ProducerABC):
 
     def __init__(self, queue_name="", queues_labels={}):
         super().__init__(queue_name, queues_labels)
-        self.topic = self.queues_labels[queue_name]["queue"] if queue_name in self.queues_labels else ""
+        self.topic = self.queue_label
         self.route = clean_route_string(self.topic)
         self.host = HTTP_HOST
 
@@ -163,7 +168,7 @@ class AsyncIOProducer(ProducerABC):
     '''
     Uses an internal AsyncIO queue to pass messages around.
     '''
-    QUEUE_TYPE = "AsyncIO"
+    QUEUE_TYPE = ["AsyncIO"]
 
     def __init__(self, queue_name, queues_labels):
         super().__init__(queue_name, queues_labels)
@@ -180,12 +185,12 @@ class RMQIOProducer(ProducerABC):
     Uses an external RabbitMQ broker queue to pass
     messages around.
     '''
-    QUEUE_TYPE = "RabbitMQ"
+    QUEUE_TYPE = ["RabbitMQ"]
 
     def __init__(self, queue_name, queues_labels):
         super().__init__(queue_name, queues_labels)
         self.loop = asyncio.get_event_loop()
-        self.routing_key = self.queues_labels[queue_name]["queue"]
+        self.routing_key = self.queue_label
 
     async def a_init(self):
         self.connection = self.queue_from_consumer
