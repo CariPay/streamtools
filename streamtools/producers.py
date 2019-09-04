@@ -196,7 +196,7 @@ class RMQIOProducer(ProducerABC):
 
     async def a_init(self):
         self.connection = self.queue_from_consumer if self.queue_from_consumer else None
-	self.connection = await aio_pika.connect_robust(
+        self.connection = await aio_pika.connect_robust(
             f"amqp://{RMQ_USER}:{RMQ_PASS}@{RMQ_HOST}/", loop=self.loop
         ) if not self.connection else self.connection
         self.channel = await self.connection.channel()
