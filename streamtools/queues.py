@@ -24,7 +24,7 @@ CONSUMER_LOOPS = {
 
 PRODUCERS = {
     "KafkaHandler": KafkaProducer,
-    "POSTHandler": HTTPProducer,
+    "HTTPHandler": HTTPProducer,
     "AsyncIOHandler": AsyncIOProducer,
     "RMQIOHandler": RMQIOProducer,
 }

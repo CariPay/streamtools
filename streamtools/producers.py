@@ -12,7 +12,7 @@ from kafka import KafkaProducer as ProducerFromKafka
 import aio_pika
 
 from .libs import log, clean_route_string, check_queue_type
-from .libs import HTTP_HOST,KAFKA_HOST, ENCODING, RMQ_USER, RMQ_PASS, RMQ_HOST
+from .libs import HTTP_HOST, RMQ_USER, RMQ_PASS, RMQ_HOST, KAFKA_HOST, ENCODING
 
 
 class ProducerABC(ABC):
@@ -195,10 +195,11 @@ class RMQIOProducer(ProducerABC):
         self.routing_key = self.queue_label
 
     async def a_init(self):
-        self.connection = self.queue_from_consumer if self.queue_from_consumer else None
         self.connection = await aio_pika.connect_robust(
-            f"amqp://{RMQ_USER}:{RMQ_PASS}@{RMQ_HOST}/", loop=self.loop
-        ) if not self.connection else self.connection
+                                f"amqp://{RMQ_USER}:{RMQ_PASS}@{RMQ_HOST}/",
+                                loop=self.loop
+                            ) \
+            if not self.queue_from_consumer else self.queue_from_consumer
         self.channel = await self.connection.channel()
 
     def add_agent_uuid(self, **kwargs_from_agent):
