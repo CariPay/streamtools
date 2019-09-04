@@ -12,7 +12,7 @@ from kafka import KafkaProducer as ProducerFromKafka
 import aio_pika
 
 from .libs import log, clean_route_string, check_queue_type
-from .libs import HTTP_HOST,KAFKA_HOST, ENCODING
+from .libs import HTTP_HOST,KAFKA_HOST, ENCODING, RMQ_USER, RMQ_PASS, RMQ_HOST
 
 
 class ProducerABC(ABC):
