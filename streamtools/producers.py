@@ -64,7 +64,7 @@ class KafkaProducer(ProducerABC):
     '''
     QUEUE_TYPE = ["Kafka"]
 
-    def __init__(self, queue_name, queues_labels):
+    def __init__(self, queue_name, queues_labels={}):
         super().__init__(queue_name, queues_labels)
         self.topic = self.queue_label
 
@@ -172,7 +172,7 @@ class AsyncIOProducer(ProducerABC):
     '''
     QUEUE_TYPE = ["AsyncIO"]
 
-    def __init__(self, queue_name, queues_labels):
+    def __init__(self, queue_name, queues_labels={}):
         super().__init__(queue_name, queues_labels)
         self.producer = None
 
@@ -189,7 +189,7 @@ class RMQIOProducer(ProducerABC):
     '''
     QUEUE_TYPE = ["RabbitMQ"]
 
-    def __init__(self, queue_name, queues_labels):
+    def __init__(self, queue_name, queues_labels={}):
         super().__init__(queue_name, queues_labels)
         self.loop = asyncio.get_event_loop()
         self.routing_key = self.queue_label
