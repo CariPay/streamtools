@@ -152,8 +152,11 @@ class HTTPProducer(ProducerABC):
         async with aiohttp.ClientSession() as session:
             send_request = session.post if method=="post" else session.get
             async with send_request(url, data=msg, headers=headers) as resp:
+                response = resp
                 if resp.status != 202:
                     log.info(f"Response: ({resp.status}) {await resp.text()}")
+
+        return response
 
     async def send(self, msg, method="post", *args, **kwargs):
         endpoint = kwargs.get("endpoint", f"http://{self.host}/{self.route[1:]}")
@@ -161,7 +164,7 @@ class HTTPProducer(ProducerABC):
         headers = self.HEADERS.get(headers_tag, self.HEADERS["JSON"])
 
         msg = self._add_class_attrs_to_msg(msg)
-        await self.send_message_via_aiohttp(url=endpoint, msg=msg, headers=headers, method=method)
+        return await self.send_message_via_aiohttp(url=endpoint, msg=msg, headers=headers, method=method)
 
 
 class AsyncIOProducer(ProducerABC):
