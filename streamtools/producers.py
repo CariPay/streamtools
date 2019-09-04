@@ -155,7 +155,6 @@ class HTTPProducer(ProducerABC):
                 response = resp
                 if resp.status != 202:
                     log.info(f"Response: ({resp.status}) {await resp.text()}")
-
         return response
 
     async def send(self, msg, method="post", *args, **kwargs):
@@ -196,7 +195,10 @@ class RMQIOProducer(ProducerABC):
         self.routing_key = self.queue_label
 
     async def a_init(self):
-        self.connection = self.queue_from_consumer
+        self.connection = self.queue_from_consumer if self.queue_from_consumer else None
+	self.connection = await aio_pika.connect_robust(
+            f"amqp://{RMQ_USER}:{RMQ_PASS}@{RMQ_HOST}/", loop=self.loop
+        ) if not self.connection else self.connection
         self.channel = await self.connection.channel()
 
     def add_agent_uuid(self, **kwargs_from_agent):
