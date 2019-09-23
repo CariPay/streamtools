@@ -154,7 +154,8 @@ class HTTPProducer(ProducerABC):
             async with send_request(url, data=msg, headers=headers) as resp:
                 response = resp
                 if resp.status != 202:
-                    log.info(f"Response: ({resp.status}) {await resp.text()}")
+                    resp_text = await resp.text()
+                    log.info(f"Response: ({resp.status}) {resp_text}")
         return response
 
     async def send(self, msg, method="post", *args, **kwargs):
