@@ -12,7 +12,7 @@ from kafka import KafkaProducer as ProducerFromKafka
 import aio_pika
 
 from .libs import log, clean_route_string, check_queue_type
-from .libs import HTTP_HOST, RMQ_USER, RMQ_PASS, RMQ_HOST, KAFKA_HOST, ENCODING
+from .libs import HOST, HTTP_HOST, RMQ_USER, RMQ_PASS, RMQ_HOST, KAFKA_HOST, ENCODING
 
 
 class ProducerABC(ABC):
@@ -22,7 +22,7 @@ class ProducerABC(ABC):
     '''
     QUEUE_TYPE = [""]
 
-    def __init__(self, queue_name, queues_labels={}):
+    def __init__(self, queue_name, queues_labels={}, host=HOST):
         check_queue_type(self)
         self.queue_name = queue_name
         self.queues_labels = queues_labels
@@ -30,6 +30,7 @@ class ProducerABC(ABC):
                                 .get(queue_name, {})
                                 .get("queue", queue_name))
 
+        self.host = host
         self._queue_from_consumer = None
         self.key = ""
 
@@ -190,14 +191,15 @@ class RMQIOProducer(ProducerABC):
     '''
     QUEUE_TYPE = ["RabbitMQ"]
 
-    def __init__(self, queue_name, queues_labels={}):
-        super().__init__(queue_name, queues_labels)
+    def __init__(self, queue_name, queues_labels={}, host=RMQ_HOST):
+        super().__init__(queue_name, queues_labels, host)
         self.loop = asyncio.get_event_loop()
         self.routing_key = self.queue_label
+        self.host = host
 
     async def a_init(self):
         self.connection = await aio_pika.connect_robust(
-                                f"amqp://{RMQ_USER}:{RMQ_PASS}@{RMQ_HOST}/",
+                                f"amqp://{RMQ_USER}:{RMQ_PASS}@{self.host}/",
                                 loop=self.loop
                             ) \
             if not self.queue_from_consumer else self.queue_from_consumer
