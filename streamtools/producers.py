@@ -12,7 +12,7 @@ from kafka import KafkaProducer as ProducerFromKafka
 import aio_pika
 
 from .libs import log, clean_route_string, check_queue_type
-from .libs import HOST, HTTP_HOST, RMQ_USER, RMQ_PASS, RMQ_HOST, KAFKA_HOST, ENCODING
+from .libs import HTTP_HOST, RMQ_USER, RMQ_PASS, RMQ_HOST, KAFKA_HOST, ENCODING
 
 
 class ProducerABC(ABC):
@@ -22,7 +22,7 @@ class ProducerABC(ABC):
     '''
     QUEUE_TYPE = [""]
 
-    def __init__(self, queue_name, queues_labels={}, host=HOST):
+    def __init__(self, queue_name, queues_labels={}, **kwargs):
         check_queue_type(self)
         self.queue_name = queue_name
         self.queues_labels = queues_labels
@@ -30,7 +30,6 @@ class ProducerABC(ABC):
                                 .get(queue_name, {})
                                 .get("queue", queue_name))
 
-        self.host = host
         self._queue_from_consumer = None
         self.key = ""
 
@@ -65,8 +64,8 @@ class KafkaProducer(ProducerABC):
     '''
     QUEUE_TYPE = ["Kafka"]
 
-    def __init__(self, queue_name, queues_labels={}):
-        super().__init__(queue_name, queues_labels)
+    def __init__(self, queue_name, queues_labels={}, **kwargs):
+        super().__init__(queue_name, queues_labels, **kwargs)
         self.topic = self.queue_label
 
         start = time.time()
@@ -128,8 +127,8 @@ class HTTPProducer(ProducerABC):
         "SSI": {'content-type': 'application/ssi-agent-wire'}
     }
 
-    def __init__(self, queue_name="", queues_labels={}):
-        super().__init__(queue_name, queues_labels)
+    def __init__(self, queue_name="", queues_labels={}, **kwargs):
+        super().__init__(queue_name, queues_labels, **kwargs)
         self.topic = self.queue_label
         self.route = clean_route_string(self.topic)
         self.host = HTTP_HOST
@@ -174,8 +173,8 @@ class AsyncIOProducer(ProducerABC):
     '''
     QUEUE_TYPE = ["AsyncIO"]
 
-    def __init__(self, queue_name, queues_labels={}):
-        super().__init__(queue_name, queues_labels)
+    def __init__(self, queue_name, queues_labels={}, **kwargs):
+        super().__init__(queue_name, queues_labels, **kwargs)
         self.producer = None
 
     async def send(self, msg, *args, **kwargs):
@@ -191,8 +190,8 @@ class RMQIOProducer(ProducerABC):
     '''
     QUEUE_TYPE = ["RabbitMQ"]
 
-    def __init__(self, queue_name, queues_labels={}, host=RMQ_HOST):
-        super().__init__(queue_name, queues_labels, host)
+    def __init__(self, queue_name, queues_labels={}, host=RMQ_HOST, **kwargs):
+        super().__init__(queue_name, queues_labels, host=host, **kwargs)
         self.loop = asyncio.get_event_loop()
         self.routing_key = self.queue_label
         self.host = host
