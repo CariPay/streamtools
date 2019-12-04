@@ -63,7 +63,7 @@ class ConsumerABC(ABC):
     def _decorator(self, string, *args, **kwargs):
         def wrapper(func):
             @wraps(func)
-            async def wrapped(*args):
+            async def wrapped(*w_args, **w_kwargs):
                 '''
                 Message processing loop decorator to be added to
                 agent's `start` task.
@@ -71,7 +71,7 @@ class ConsumerABC(ABC):
                 while True:
                     async for msg in self.consumer:
                         # Decorated function comes in here
-                        await func(*args, msg)
+                        await func(msg, *w_args, **w_kwargs)
             return wrapped
         return wrapper
 
@@ -102,7 +102,7 @@ class KafkaConsumerLoop(ConsumerABC):
     def _decorator(self, string, *args, **kwargs):
         def wrapper(func):
             @wraps(func)
-            async def wrapped(*args):
+            async def wrapped(*w_args, **w_kwargs):
                 """
                 Message processing loop decorator to be added to `start` task.
                 """
@@ -123,7 +123,7 @@ class KafkaConsumerLoop(ConsumerABC):
                                 else msg
 
                             # Decorated function comes in here
-                            await func(*args, msg)
+                            await func(msg, *w_args, **w_kwargs)
 
             return wrapped
         return wrapper
@@ -142,7 +142,7 @@ class AsyncIOConsumerLoop(ConsumerABC):
     def _decorator(self, string, *args, **kwargs):
         def wrapper(func):
             @wraps(func)
-            async def wrapped(*args):
+            async def wrapped(*w_args, **w_kwargs):
                 """
                 Message processing loop decorator to be added to `start` task.
                 """
@@ -151,7 +151,7 @@ class AsyncIOConsumerLoop(ConsumerABC):
                         log.info('Got a message')
 
                         # Decorated function comes in here
-                        await func(*args, msg)
+                        await func(msg, *w_args, **w_kwargs)
             return wrapped
         return wrapper
 
@@ -188,7 +188,7 @@ class RMQIOConsumerLoop(ConsumerABC):
     def _decorator(self, string, *args, **kwargs):
         def wrapper(func):
             @wraps(func)
-            async def wrapped(*args):
+            async def wrapped(*w_args, **w_kwargs):
                 """
                 Message processing loop decorator to be added to `start` task.
                 """
@@ -200,7 +200,7 @@ class RMQIOConsumerLoop(ConsumerABC):
                             msg = msg.body
 
                             # Decorated function comes in here
-                            await func(*args, msg)
+                            await func(msg, *w_args, **w_kwargs)
 
             return wrapped
         return wrapper
