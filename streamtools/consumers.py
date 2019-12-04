@@ -177,7 +177,7 @@ class RMQIOConsumerLoop(ConsumerABC):
         # Declaring queue
         self.queue = await self.channel.declare_queue(
             self.routing_key,
-            auto_delete=True
+            auto_delete=False
         )   # type: aio_pika.Queue
         self.a_init_ran = True
 
