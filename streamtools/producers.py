@@ -190,13 +190,14 @@ class RMQIOProducer(ProducerABC):
     '''
     QUEUE_TYPE = ["RabbitMQ"]
 
-    def __init__(self, queue_name, queues_labels={}, host=RMQ_HOST, **kwargs):
-        super().__init__(queue_name, queues_labels, host=host, **kwargs)
+    def __init__(self, queue_name, queues_labels={}, **kwargs):
+        super().__init__(queue_name, queues_labels, **kwargs)
         self.loop = asyncio.get_event_loop()
         self.routing_key = self.queue_label
-        self.host = host
+        self.host = RMQ_HOST
 
     async def a_init(self):
+        log.info(f"Producer connecting to ip <{self.host}> with topic <{self.routing_key}>")
         self.connection = await aio_pika.connect_robust(
                                 f"amqp://{RMQ_USER}:{RMQ_PASS}@{self.host}/",
                                 loop=self.loop

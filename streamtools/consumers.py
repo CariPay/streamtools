@@ -166,10 +166,12 @@ class RMQIOConsumerLoop(ConsumerABC):
     def __init__(self, queue_name, queues_labels={}, **kwargs):
         super().__init__(queue_name, queues_labels, **kwargs)
         self.routing_key = self.queue_label
+        self.host = RMQ_HOST
 
     async def a_init(self):
+        log.info(f"Consumer connecting to ip <{self.host}> with topic <{self.routing_key}>")
         self.connection = self.queue_ref = await aio_pika.connect_robust(
-            f"amqp://{RMQ_USER}:{RMQ_PASS}@{RMQ_HOST}/", loop=self.loop
+            f"amqp://{RMQ_USER}:{RMQ_PASS}@{self.host}/", loop=self.loop
         )
         # Creating channel
         self.channel = await self.connection.channel()    # type: aio_pika.Channel

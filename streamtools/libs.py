@@ -12,7 +12,10 @@ log = logging.getLogger()
 
 ENCODING = os.environ.get("ENCODING", "utf-8")
 
-IP = socket.gethostbyname(socket.gethostname())
+try:
+    IP = socket.gethostbyname(socket.gethostname())
+except Exception:
+    IP = socket.gethostbyname('localhost')
 
 RMQ_USER = os.environ.get("RMQ_USER", "guest")
 RMQ_PASS = os.environ.get("RMQ_PASS", "guest")
