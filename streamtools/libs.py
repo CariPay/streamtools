@@ -12,14 +12,14 @@ log = logging.getLogger()
 
 ENCODING = os.environ.get("ENCODING", "utf-8")
 
-HOST = os.environ.get("IP", socket.gethostbyname('localhost'))
+IP = socket.gethostbyname(socket.gethostname())
 
 RMQ_USER = os.environ.get("RMQ_USER", "guest")
 RMQ_PASS = os.environ.get("RMQ_PASS", "guest")
-RMQ_HOST = HOST
+RMQ_HOST = os.environ.get("RMQ_HOST", IP)
 
-HTTP_HOST = os.environ.get("HTTP_HOST", f"{HOST}:3000")  # includes port for HTTP
-KAFKA_HOST = os.environ.get("KAFKA_HOST", f"{HOST}:9092")  # includes port for Kafka
+HTTP_HOST = os.environ.get("HTTP_HOST", f"{IP}:3000")  # includes port for HTTP
+KAFKA_HOST = os.environ.get("KAFKA_HOST", f"{IP}:9092")  # includes port for Kafka
 
 
 def clean_route_string(string):
