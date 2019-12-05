@@ -170,9 +170,24 @@ class RMQIOConsumerLoop(ConsumerABC):
 
     async def a_init(self):
         log.info(f"Consumer connecting to ip <{self.host}> with topic <{self.routing_key}>")
-        self.connection = self.queue_ref = await aio_pika.connect_robust(
-            f"amqp://{RMQ_USER}:{RMQ_PASS}@{self.host}/", loop=self.loop
-        )
+        tries, MAX_TRIES = 0, 10
+        SLEEP = 3
+        while tries < MAX_TRIES:
+            tries += 1
+            try:
+                self.connection = self.queue_ref = await aio_pika.connect_robust(
+                    f"amqp://{RMQ_USER}:{RMQ_PASS}@{self.host}/", loop=self.loop
+                )
+                tries = MAX_TRIES
+            except ConnectionError as e:
+                log.error(e)
+                time.sleep(SLEEP)
+                print(f"Retrying connect... ({tries} of {MAX_TRIES})")
+            except Exception as e:
+                log.error(e)
+                traceback.print_exc()
+                tries = MAX_TRIES
+
         # Creating channel
         self.channel = await self.connection.channel()    # type: aio_pika.Channel
 
