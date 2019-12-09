@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 from kafka import KafkaProducer as ProducerFromKafka
 import aio_pika
 
-from .libs import log, clean_route_string, check_queue_type
+from .libs import log, clean_queue_label, check_queue_type
 from .libs import HTTP_HOST, RMQ_USER, RMQ_PASS, RMQ_HOST, KAFKA_HOST, ENCODING
 
 
@@ -130,7 +130,7 @@ class HTTPProducer(ProducerABC):
     def __init__(self, queue_name="", queues_labels={}, **kwargs):
         super().__init__(queue_name, queues_labels, **kwargs)
         self.topic = self.queue_label
-        self.route = clean_route_string(self.topic)
+        self.route = clean_queue_label(self.topic)
         self.host = HTTP_HOST
 
     async def a_init(self):

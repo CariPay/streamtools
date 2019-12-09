@@ -12,7 +12,7 @@ from aiohttp import web
 from aiokafka import AIOKafkaConsumer
 import aio_pika
 
-from .libs import log, clean_route_string, get_free_port, check_queue_type, AsyncioQueue, ClassRouteTableDef
+from .libs import log, clean_queue_label, get_free_port, check_queue_type, AsyncioQueue, ClassRouteTableDef
 from .libs import ENCODING, RMQ_USER, RMQ_PASS, RMQ_HOST, KAFKA_HOST
 
 
@@ -43,30 +43,30 @@ class ConsumerABC(ABC):
     def add_agent_uuid(self, **kwargs_from_agent):
         pass
 
-    def __call__(self, queue="", override=False, *args, **kwargs):
+    def __call__(self, queue_arg="", override=False, *args, **kwargs):
         # Checks:
-        # 1. if override is True and `queue` is not empty, then
-        #    `queue` overrides `self.queue_label`
+        # 1. if override is True and `queue_arg` is not empty, then
+        #    `queue_arg` overrides `self.queue_label`
         # 2. if override is False but (and) `self.queue_label` is empty then
-        #    `queue` overrides `self.queue_label`
-        check_1: bool = override and queue
+        #    `queue_arg` overrides `self.queue_label`
+        check_1: bool = override and queue_arg
         check_2: bool = not override and not self.queue_label
         queue_checks: bool = check_1 or check_2
 
-        route = queue if queue_checks else (self.queue_label or "")
+        set_queue_label = queue_arg if queue_checks else (self.queue_label or "")
 
-        assert route, "Internal route not set by HandleMsgs class or included as a decorator arg."
-        route = clean_route_string(route)
+        assert set_queue_label, "Internal queue not set by HandleMsgs class or included as a decorator arg."
+        set_queue_label = clean_queue_label(set_queue_label)
 
-        log.info(f"{self} routing on '{route}'")
-        if (queue and queue != route) and isinstance(self, HTTPConsumerLoop):
-            print(f"Note: cosmetic route '{queue}' arg passed is not the same as internal route '{route}' being used.", \
-                        "\n (use `override=True` arg on route decorator to change this)")
+        log.info(f"{self} routing on '{set_queue_label}'")
+        if (queue_arg and queue_arg != set_queue_label) and isinstance(self, HTTPConsumerLoop):
+            print(f"Note: decorator queue '{queue_arg}' arg passed is not the same as class queue '{set_queue_label}' being used.", \
+                        "\n (use `override=True` arg on queue decorator to change this)")
 
-        return self._decorator(route, *args, **kwargs)
+        return self._decorator(set_queue_label, *args, **kwargs)
 
     @abstractmethod
-    def _decorator(self, string, *args, **kwargs):
+    def _decorator(self, set_queue_label, *args, **kwargs):
         def wrapper(func):
             @wraps(func)
             async def wrapped(*w_args, **w_kwargs):
@@ -105,7 +105,7 @@ class KafkaConsumerLoop(ConsumerABC):
             #group_id="my-group"
         )
 
-    def _decorator(self, string, *args, **kwargs):
+    def _decorator(self, set_queue_label, *args, **kwargs):
         def wrapper(func):
             @wraps(func)
             async def wrapped(*w_args, **w_kwargs):
@@ -145,7 +145,7 @@ class AsyncIOConsumerLoop(ConsumerABC):
         super().__init__(queue_name, queues_labels, **kwargs)
         self.consumer = self.queue_ref = AsyncioQueue()
 
-    def _decorator(self, string, *args, **kwargs):
+    def _decorator(self, set_queue_label, *args, **kwargs):
         def wrapper(func):
             @wraps(func)
             async def wrapped(*w_args, **w_kwargs):
@@ -208,7 +208,7 @@ class RMQIOConsumerLoop(ConsumerABC):
         self.key = kwargs_from_agent[self.QUEUE_TYPE]
         self.routing_key += f"-{self.key[:5]}"
 
-    def _decorator(self, string, *args, **kwargs):
+    def _decorator(self, set_queue_label, *args, **kwargs):
         def wrapper(func):
             @wraps(func)
             async def wrapped(*w_args, **w_kwargs):
@@ -261,10 +261,10 @@ class HTTPConsumerLoop(ConsumerABC):
     def add_agent_uuid(self, **kwargs_from_agent):
         pass
 
-    def _decorator(self, string, method="post"):
+    def _decorator(self, set_queue_label, method="post"):
         routes_methods = {
             "get": self.routes.get,
             "post": self.routes.post,
         }
         route_send = routes_methods.get(method.lower(), routes_methods[self.default_method])
-        return route_send(string)
+        return route_send(set_queue_label)
