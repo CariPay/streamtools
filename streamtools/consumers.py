@@ -43,18 +43,24 @@ class ConsumerABC(ABC):
     def add_agent_uuid(self, **kwargs_from_agent):
         pass
 
-    def __call__(self, string="", override=False, *args, **kwargs):
-        queue = self.queue_label if self.queue_label else ""
+    def __call__(self, queue="", override=False, *args, **kwargs):
+        # Checks:
+        # 1. if override is True and `queue` is not empty, then
+        #    `queue` overrides `self.queue_label`
+        # 2. if override is False but (and) `self.queue_label` is empty then
+        #    `queue` overrides `self.queue_label`
+        check_1: bool = override and queue
+        check_2: bool = not override and not self.queue_label
+        queue_checks: bool = check_1 or check_2
 
-        route = queue if not override else string
-        route = queue if not route else route
-        route = string if not route else route
+        route = queue if queue_checks else (self.queue_label or "")
+
         assert route, "Internal route not set by HandleMsgs class or included as a decorator arg."
         route = clean_route_string(route)
 
         log.info(f"{self} routing on '{route}'")
-        if (string and string != route) and isinstance(self, HTTPConsumerLoop):
-            print(f"Note: cosmetic route '{string}' arg passed is not the same as internal route '{route}' being used.", \
+        if (queue and queue != route) and isinstance(self, HTTPConsumerLoop):
+            print(f"Note: cosmetic route '{queue}' arg passed is not the same as internal route '{route}' being used.", \
                         "\n (use `override=True` arg on route decorator to change this)")
 
         return self._decorator(route, *args, **kwargs)
