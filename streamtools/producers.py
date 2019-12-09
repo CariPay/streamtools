@@ -3,7 +3,6 @@ import asyncio
 import json
 import logging
 import os
-import requests
 import time
 import traceback
 from abc import ABC, abstractmethod
