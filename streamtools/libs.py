@@ -28,7 +28,7 @@ KAFKA_HOST = os.environ.get("KAFKA_HOST", f"{IP}:9092")  # includes port for Kaf
 def clean_queue_label(string):
     pattern = re.compile('[^a-zA-Z0-9-_]+', re.UNICODE)
     cleaned_string = pattern.sub('', string)
-    return f"/{cleaned_string}"
+    return cleaned_string
 
 
 def get_free_port():

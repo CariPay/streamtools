@@ -29,6 +29,7 @@ class ProducerABC(ABC):
         self.queue_label = (self.queues_labels
                                 .get(queue_name, {})
                                 .get("queue", queue_name))
+        self.queue_label = clean_queue_label(self.queue_label)
 
         self._queue_from_consumer = None
         self.key = ""
@@ -130,7 +131,7 @@ class HTTPProducer(ProducerABC):
     def __init__(self, queue_name="", queues_labels={}, **kwargs):
         super().__init__(queue_name, queues_labels, **kwargs)
         self.topic = self.queue_label
-        self.route = clean_queue_label(self.topic)
+        self.route = self.queue_label
         self.host = HTTP_HOST
 
     async def a_init(self):
@@ -159,7 +160,7 @@ class HTTPProducer(ProducerABC):
         return response
 
     async def send(self, msg, method="post", *args, **kwargs):
-        endpoint = kwargs.get("endpoint", f"http://{self.host}/{self.route[1:]}")
+        endpoint = kwargs.get("endpoint", f"http://{self.host}/{self.route}")
         headers_tag = kwargs.get("headers", "JSON")
         headers = self.HEADERS.get(headers_tag, self.HEADERS["JSON"])
 

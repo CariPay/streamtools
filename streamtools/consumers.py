@@ -31,6 +31,7 @@ class ConsumerABC(ABC):
         self.queue_label = (self.queues_labels
                                 .get(queue_name, {})
                                 .get("queue", queue_name))
+        self.queue_label = clean_queue_label(self.queue_label)
 
         self.loop = asyncio.get_event_loop()
         self.consumer = None
@@ -54,9 +55,8 @@ class ConsumerABC(ABC):
         queue_checks: bool = check_1 or check_2
 
         set_queue_label = queue_arg if queue_checks else (self.queue_label or "")
-
-        assert set_queue_label, "Internal queue not set by HandleMsgs class or included as a decorator arg."
         set_queue_label = clean_queue_label(set_queue_label)
+        assert set_queue_label, "Internal queue not set by HandleMsgs class or included as a decorator arg."
 
         log.info(f"{self} routing on '{set_queue_label}'")
         if (queue_arg and queue_arg != set_queue_label) and isinstance(self, HTTPConsumerLoop):
@@ -266,5 +266,5 @@ class HTTPConsumerLoop(ConsumerABC):
             "get": self.routes.get,
             "post": self.routes.post,
         }
-        route_send = routes_methods.get(method.lower(), routes_methods[self.default_method])
-        return route_send(set_queue_label)
+        send = routes_methods.get(method.lower(), routes_methods[self.default_method])
+        return send(f"/{set_queue_label}")
