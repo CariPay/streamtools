@@ -60,8 +60,8 @@ class ConsumerABC(ABC):
 
         log.info(f"{self} routing on '{set_queue_label}'")
         if (queue_arg and queue_arg != set_queue_label) and isinstance(self, HTTPConsumerLoop):
-            print(f"Note: decorator queue '{queue_arg}' arg passed is not the same as class queue '{set_queue_label}' being used.", \
-                        "\n (use `override=True` arg on queue decorator to change this)")
+            log.info(f"Note: decorator queue '{queue_arg}' arg passed is not the same as class queue '{set_queue_label}' being used.")
+            log.info(f"(use `override=True` arg on queue decorator to change this)")
 
         return self._decorator(set_queue_label, *args, **kwargs)
 
@@ -115,7 +115,8 @@ class KafkaConsumerLoop(ConsumerABC):
                 try:
                     await self.consumer.start()
                 except AssertionError as e:
-                    print(e, '\ncontinuing...\n')
+                    log.error(e)
+                    log.info('continuing...')
 
                 while True:
                     async for msg in self.consumer:
@@ -181,14 +182,16 @@ class RMQIOConsumerLoop(ConsumerABC):
         while tries < MAX_TRIES:
             tries += 1
             try:
-                self.connection = self.queue_ref = await aio_pika.connect_robust(
-                    f"amqp://{RMQ_USER}:{RMQ_PASS}@{self.host}/", loop=self.loop
-                )
+                rmq_url = f"amqp://{RMQ_USER}:{RMQ_PASS}@{self.host}/"
+                log.info(f"Connecting to RabbitMQ host at: {rmq_url}")
+                self.connection = self.queue_ref = \
+                    await aio_pika.connect_robust(rmq_url, loop=self.loop)
+                log.info(f"Successfully connected! {self} {rmq_url}")
                 tries = MAX_TRIES
             except ConnectionError as e:
                 log.error(e)
                 time.sleep(SLEEP)
-                print(f"Retrying connect... ({tries} of {MAX_TRIES})")
+                log.info(f"Retrying connect... ({tries} of {MAX_TRIES})")
             except Exception as e:
                 log.error(e)
                 traceback.print_exc()
