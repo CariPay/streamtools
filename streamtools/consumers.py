@@ -56,12 +56,20 @@ class ConsumerABC(ABC):
 
         set_queue_label = queue_arg if queue_checks else (self.queue_label or "")
         set_queue_label = clean_queue_label(set_queue_label)
-        assert set_queue_label, "Internal queue not set by HandleMsgs class or included as a decorator arg."
+        if not isinstance(self, HTTPConsumerLoop):
+            assert set_queue_label, \
+                    "Internal queue not set by HandleMsgs class or included as a decorator arg."
 
         log.info(f"{self} routing on '{set_queue_label}'")
-        if (queue_arg and queue_arg != set_queue_label) and isinstance(self, HTTPConsumerLoop):
-            log.info(f"Note: decorator queue '{queue_arg}' arg passed is not the same as class queue '{set_queue_label}' being used.")
-            log.info(f"(use `override=True` arg on queue decorator to change this)")
+        if (queue_arg and queue_arg not in [set_queue_label, f"/{set_queue_label}"]) \
+            and isinstance(self, HTTPConsumerLoop):
+            # Setup log msgs
+            log_msg1 = f"Note: decorator queue '{queue_arg}' arg passed is not the same as" + \
+                       f" 'HTTP Handler' class queue '{set_queue_label}' being used."
+            log_msg2 = f"(use `override=True` arg on queue decorator to change this)"
+
+            # Send log messages
+            [log.info(msg) for msg in (log_msg1, log_msg2)]
 
         return self._decorator(set_queue_label, *args, **kwargs)
 
