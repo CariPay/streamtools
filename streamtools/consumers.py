@@ -56,9 +56,10 @@ class ConsumerABC(ABC):
 
         set_queue_label = queue_arg if queue_checks else (self.queue_label or "")
         set_queue_label = clean_queue_label(set_queue_label)
-        if not isinstance(self, HTTPConsumerLoop):
-            assert set_queue_label, \
-                    "Internal queue not set by HandleMsgs class or included as a decorator arg."
+        # TODO Review how rabbitmq handles empty queue names (and any other services)
+        # if not isinstance(self, HTTPConsumerLoop):
+        #     assert set_queue_label, \
+        #             "Internal queue not set by HandleMsgs class or included as a decorator arg."
 
         log.info(f"{self} routing on '{set_queue_label}'")
         if (queue_arg and queue_arg not in [set_queue_label, f"/{set_queue_label}"]) \
