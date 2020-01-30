@@ -197,12 +197,10 @@ class RMQIOProducer(ProducerABC):
         self.host = RMQ_HOST
 
     async def a_init(self):
+        rmq_url = f"amqp://{RMQ_USER}:{RMQ_PASS}@{self.host}/"
         log.info(f"Producer connecting to ip <{self.host}> with topic <{self.routing_key}>")
-        self.connection = await aio_pika.connect_robust(
-                                f"amqp://{RMQ_USER}:{RMQ_PASS}@{self.host}/",
-                                loop=self.loop
-                            ) \
-            if not self.queue_from_consumer else self.queue_from_consumer
+        self.connection = await aio_pika.connect_robust(rmq_url,loop=self.loop) \
+                                    if not self.queue_from_consumer else self.queue_from_consumer
         self.channel = await self.connection.channel()
 
     def add_agent_uuid(self, **kwargs_from_agent):
