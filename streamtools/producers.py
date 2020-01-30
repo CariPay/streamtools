@@ -151,8 +151,8 @@ class HTTPProducer(ProducerABC):
     async def send_message_via_aiohttp(self, url, msg, headers, method="post"):
         async with aiohttp.ClientSession() as session:
             send_request = session.post if method=="post" else session.get
-            async with send_request(url, data=msg, headers=headers) as resp:
-                response = resp
+            async with send_request(url, data=msg, headers=headers) as response:
+                resp = response
                 if resp.status != 202:
                     resp_text = await resp.text()
                     log.info(f"Response: ({resp.status}) {resp_text}")
