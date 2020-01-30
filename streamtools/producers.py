@@ -82,7 +82,7 @@ class KafkaProducer(ProducerABC):
         log.info(f"Got '{self.topic}' kafka producer in {round(end - start, 2)}s!")
 
     def add_agent_uuid(self, **kwargs_from_agent):
-        self.key = kwargs_from_agent[self.QUEUE_TYPE]
+        self.key = kwargs_from_agent[self.QUEUE_TYPE[0]]
 
     def send(self, message, *args, **kwargs):
         try:
@@ -120,7 +120,7 @@ class HTTPProducer(ProducerABC):
     \"msg_topic\": for the relevant kafka topic queue\n
     \"msg_key\": to link back messages to the agent
     '''
-    QUEUE_TYPE = ["Kafka", "RabbitMQ", "HTTP"]
+    QUEUE_TYPE = ["HTTP", "Kafka", "RabbitMQ"]
 
     HEADERS = {
         "JSON": {'content-type': 'application/json'},
@@ -206,7 +206,7 @@ class RMQIOProducer(ProducerABC):
         self.channel = await self.connection.channel()
 
     def add_agent_uuid(self, **kwargs_from_agent):
-        self.key = kwargs_from_agent[self.QUEUE_TYPE]
+        self.key = kwargs_from_agent[self.QUEUE_TYPE[0]]
         self.routing_key += f"-{self.key[:5]}"
 
     async def send(self, msg, *args, **kwargs):

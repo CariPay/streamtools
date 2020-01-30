@@ -217,7 +217,7 @@ class RMQIOConsumerLoop(ConsumerABC):
         self.a_init_ran = True
 
     def add_agent_uuid(self, **kwargs_from_agent):
-        self.key = kwargs_from_agent[self.QUEUE_TYPE]
+        self.key = kwargs_from_agent[self.QUEUE_TYPE[0]]
         self.routing_key += f"-{self.key[:5]}"
 
     def _decorator(self, set_queue_label, *args, **kwargs):
