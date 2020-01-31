@@ -13,7 +13,7 @@ from .producers import \
     AsyncIOProducer, \
     RMQIOProducer
 
-from .libs import prepare_aiohttp_app, check_queue_type
+from .libs import prepare_aiohttp_app, check_queue_type, log
 
 CONSUMER_LOOPS = {
     "KafkaHandler": KafkaConsumerLoop,
@@ -180,14 +180,14 @@ class ConsumerRunner:
         site = await prepare_aiohttp_app(app=self.webapp, routes=routes, port=self.port, host=self.host)
 
         if not (self.consumers and self.handlers):
-            print("No consumers passed to run function. Exiting...")
+            log.info("No consumers passed to run function. Exiting...")
             asyncio.get_running_loop().stop()
         elif site:
-            print(f"===== Starting HANDLER on: http://localhost:{self.port} =====")
+            log.info(f"===== Starting HANDLER on: http://localhost:{self.port} =====")
             await site.start()
         else:
             queue_type = f"{self.consumers[0].QUEUE_TYPE} Handler"
-            print(f"===== Starting HANDLER on: {queue_type} =====")
+            log.info(f"===== Starting HANDLER on: {queue_type} =====")
             await asyncio.gather(*[handler() for handler in self.handlers])
 
 

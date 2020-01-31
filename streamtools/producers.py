@@ -82,7 +82,7 @@ class KafkaProducer(ProducerABC):
         log.info(f"Got '{self.topic}' kafka producer in {round(end - start, 2)}s!")
 
     def add_agent_uuid(self, **kwargs_from_agent):
-        self.key = kwargs_from_agent[self.QUEUE_TYPE]
+        self.key = kwargs_from_agent[self.QUEUE_TYPE[0]]
 
     def send(self, message, *args, **kwargs):
         try:
@@ -120,7 +120,7 @@ class HTTPProducer(ProducerABC):
     \"msg_topic\": for the relevant kafka topic queue\n
     \"msg_key\": to link back messages to the agent
     '''
-    QUEUE_TYPE = ["Kafka", "RabbitMQ", "HTTP"]
+    QUEUE_TYPE = ["HTTP", "Kafka", "RabbitMQ"]
 
     HEADERS = {
         "JSON": {'content-type': 'application/json'},
@@ -151,11 +151,10 @@ class HTTPProducer(ProducerABC):
     async def send_message_via_aiohttp(self, url, msg, headers, method="post"):
         async with aiohttp.ClientSession() as session:
             send_request = session.post if method=="post" else session.get
-            async with send_request(url, data=msg, headers=headers) as resp:
-                response = resp
+            async with send_request(url, data=msg, headers=headers) as response:
+                resp = response
                 if resp.status != 202:
-                    resp_text = await resp.text()
-                    log.info(f"Response: ({resp.status}) {resp_text}")
+                    log.info(f"Response: ({resp.status}) {await resp.text()}")
         return response
 
     async def send(self, msg, method="post", *args, **kwargs):
@@ -197,16 +196,14 @@ class RMQIOProducer(ProducerABC):
         self.host = RMQ_HOST
 
     async def a_init(self):
+        rmq_url = f"amqp://{RMQ_USER}:{RMQ_PASS}@{self.host}/"
         log.info(f"Producer connecting to ip <{self.host}> with topic <{self.routing_key}>")
-        self.connection = await aio_pika.connect_robust(
-                                f"amqp://{RMQ_USER}:{RMQ_PASS}@{self.host}/",
-                                loop=self.loop
-                            ) \
-            if not self.queue_from_consumer else self.queue_from_consumer
+        self.connection = await aio_pika.connect_robust(rmq_url,loop=self.loop) \
+                                    if not self.queue_from_consumer else self.queue_from_consumer
         self.channel = await self.connection.channel()
 
     def add_agent_uuid(self, **kwargs_from_agent):
-        self.key = kwargs_from_agent[self.QUEUE_TYPE]
+        self.key = kwargs_from_agent[self.QUEUE_TYPE[0]]
         self.routing_key += f"-{self.key[:5]}"
 
     async def send(self, msg, *args, **kwargs):

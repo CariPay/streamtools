@@ -56,12 +56,21 @@ class ConsumerABC(ABC):
 
         set_queue_label = queue_arg if queue_checks else (self.queue_label or "")
         set_queue_label = clean_queue_label(set_queue_label)
-        assert set_queue_label, "Internal queue not set by HandleMsgs class or included as a decorator arg."
+        # TODO Review how rabbitmq handles empty queue names (and any other services)
+        # if not isinstance(self, HTTPConsumerLoop):
+        #     assert set_queue_label, \
+        #             "Internal queue not set by HandleMsgs class or included as a decorator arg."
 
         log.info(f"{self} routing on '{set_queue_label}'")
-        if (queue_arg and queue_arg != set_queue_label) and isinstance(self, HTTPConsumerLoop):
-            print(f"Note: decorator queue '{queue_arg}' arg passed is not the same as class queue '{set_queue_label}' being used.", \
-                        "\n (use `override=True` arg on queue decorator to change this)")
+        if (queue_arg and queue_arg not in [set_queue_label, f"/{set_queue_label}"]) \
+            and isinstance(self, HTTPConsumerLoop):
+            # Setup log msgs
+            log_msg1 = f"Note: decorator queue '{queue_arg}' arg passed is not the same as" + \
+                       f" 'HTTP Handler' class queue '{set_queue_label}' being used."
+            log_msg2 = f"(use `override=True` arg on queue decorator to change this)"
+
+            # Send log messages
+            [log.info(msg) for msg in (log_msg1, log_msg2)]
 
         return self._decorator(set_queue_label, *args, **kwargs)
 
@@ -115,7 +124,8 @@ class KafkaConsumerLoop(ConsumerABC):
                 try:
                     await self.consumer.start()
                 except AssertionError as e:
-                    print(e, '\ncontinuing...\n')
+                    log.error(e)
+                    log.info('continuing...')
 
                 while True:
                     async for msg in self.consumer:
@@ -181,14 +191,16 @@ class RMQIOConsumerLoop(ConsumerABC):
         while tries < MAX_TRIES:
             tries += 1
             try:
-                self.connection = self.queue_ref = await aio_pika.connect_robust(
-                    f"amqp://{RMQ_USER}:{RMQ_PASS}@{self.host}/", loop=self.loop
-                )
+                rmq_url = f"amqp://{RMQ_USER}:{RMQ_PASS}@{self.host}/"
+                log.info(f"Connecting to RabbitMQ host at: {rmq_url}")
+                self.connection = self.queue_ref = \
+                    await aio_pika.connect_robust(rmq_url, loop=self.loop)
+                log.info(f"Successfully connected! {self} {rmq_url}")
                 tries = MAX_TRIES
             except ConnectionError as e:
                 log.error(e)
                 time.sleep(SLEEP)
-                print(f"Retrying connect... ({tries} of {MAX_TRIES})")
+                log.info(f"Retrying connect... ({tries} of {MAX_TRIES})")
             except Exception as e:
                 log.error(e)
                 traceback.print_exc()
@@ -205,7 +217,7 @@ class RMQIOConsumerLoop(ConsumerABC):
         self.a_init_ran = True
 
     def add_agent_uuid(self, **kwargs_from_agent):
-        self.key = kwargs_from_agent[self.QUEUE_TYPE]
+        self.key = kwargs_from_agent[self.QUEUE_TYPE[0]]
         self.routing_key += f"-{self.key[:5]}"
 
     def _decorator(self, set_queue_label, *args, **kwargs):
