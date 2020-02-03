@@ -1,6 +1,8 @@
 import asyncio
 from aiohttp import web
 
+from .constants import KAFKA, ASYNCIO, RABBITMQ, HTTP
+
 from .consumers import \
     KafkaConsumerLoop, \
     AsyncIOConsumerLoop, \
@@ -16,17 +18,17 @@ from .producers import \
 from .libs import prepare_aiohttp_app, check_queue_type, log
 
 CONSUMER_LOOPS = {
-    "KafkaHandler": KafkaConsumerLoop,
-    "AsyncIOHandler": AsyncIOConsumerLoop,
-    "RMQIOHandler": RMQIOConsumerLoop,
-    "HTTPHandler": HTTPConsumerLoop
+    HTTP: HTTPConsumerLoop,
+    RABBITMQ: RMQIOConsumerLoop,
+    ASYNCIO: AsyncIOConsumerLoop,
+    KAFKA: KafkaConsumerLoop,
 }
 
 PRODUCERS = {
-    "KafkaHandler": KafkaProducer,
-    "HTTPHandler": HTTPProducer,
-    "AsyncIOHandler": AsyncIOProducer,
-    "RMQIOHandler": RMQIOProducer,
+    HTTP: HTTPProducer,
+    RABBITMQ: RMQIOProducer,
+    ASYNCIO: AsyncIOProducer,
+    KAFKA: KafkaProducer,
 }
 
 
