@@ -207,6 +207,9 @@ class RMQIOProducer(ProducerABC):
         self.routing_key += f"-{self.key[:5]}"
 
     async def send(self, msg, *args, **kwargs):
+        if self.channel.is_closed:
+            self.channel = await self.connection.channel()
+
         await self.channel.default_exchange.publish(
             aio_pika.Message(
                 body=msg.encode()
