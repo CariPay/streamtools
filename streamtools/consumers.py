@@ -206,6 +206,13 @@ class RMQIOConsumerLoop(ConsumerABC):
                 traceback.print_exc()
                 tries = MAX_TRIES
 
+        self.a_init_ran = True
+
+    def add_agent_uuid(self, **kwargs_from_agent):
+        self.key = kwargs_from_agent[self.QUEUE_TYPE[0]]
+        self.routing_key += f"-{self.key[:5]}"
+
+    async def _create_channel_and_queue(self):
         # Creating channel
         self.channel = await self.connection.channel()    # type: aio_pika.Channel
 
@@ -214,11 +221,6 @@ class RMQIOConsumerLoop(ConsumerABC):
             self.routing_key,
             auto_delete=False
         )   # type: aio_pika.Queue
-        self.a_init_ran = True
-
-    def add_agent_uuid(self, **kwargs_from_agent):
-        self.key = kwargs_from_agent[self.QUEUE_TYPE[0]]
-        self.routing_key += f"-{self.key[:5]}"
 
     def _decorator(self, set_queue_label, *args, **kwargs):
         def wrapper(func):
@@ -227,15 +229,16 @@ class RMQIOConsumerLoop(ConsumerABC):
                 """
                 Message processing loop decorator to be added to `start` task.
                 """
-                async with self.connection, \
-                        self.queue.iterator() as consumer:
-                    # Cancel consuming after __aexit__
-                    async for msg in consumer:
-                        async with msg.process():
-                            msg = msg.body
+                async with self.connection:
+                    await self._create_channel_and_queue()
+                    async with self.queue.iterator() as consumer:
+                        # Cancel consuming after __aexit__
+                        async for msg in consumer:
+                            async with msg.process():
+                                msg = msg.body
 
-                            # Decorated function comes in here
-                            await func(msg, *w_args, **w_kwargs)
+                                # Decorated function comes in here
+                                await func(msg, *w_args, **w_kwargs)
 
             return wrapped
         return wrapper
