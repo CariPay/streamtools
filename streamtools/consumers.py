@@ -12,7 +12,8 @@ from aiohttp import web
 from aiokafka import AIOKafkaConsumer
 import aio_pika
 
-from .libs import log, clean_queue_label, get_free_port, check_queue_type, AsyncioQueue, ClassRouteTableDef
+from .libs import log, log_error, TRACEBACK, clean_queue_label, get_free_port, \
+                  check_queue_type, AsyncioQueue, ClassRouteTableDef
 from .libs import ENCODING, RMQ_USER, RMQ_PASS, RMQ_HOST, KAFKA_HOST
 
 
@@ -105,6 +106,7 @@ class ConsumerABC(ABC):
                     "'self/cls' argument not being consistently passed into class method"
                 await func(self_obj, msg)
             except AssertionError as e:
+                error_msg = log_error(e, with_traceback=TRACEBACK)
                 await func(self.self_obj, msg)
         else:
             await func(msg)

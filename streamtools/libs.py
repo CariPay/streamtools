@@ -24,6 +24,16 @@ RMQ_HOST = os.environ.get("RMQ_HOST", IP)
 HTTP_HOST = os.environ.get("HTTP_HOST", f"{IP}:3000")  # includes port for HTTP
 KAFKA_HOST = os.environ.get("KAFKA_HOST", f"{IP}:9092")  # includes port for Kafka
 
+TRACEBACK = bool(os.environ.get('TRACEBACK', True))
+
+def log_error(error, with_traceback=TRACEBACK):
+    if not with_traceback:
+        log.error(f"{type(error).__name__}: {error}")
+    else:
+        traceback_msg = f"Printing traceback for error: \"{error}\":\n{traceback.format_exc()}"
+        log.error(traceback_msg)
+
+    return str(error)
 
 def clean_queue_label(string):
     pattern = re.compile('[^a-zA-Z0-9-_]+', re.UNICODE)
