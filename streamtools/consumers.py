@@ -35,6 +35,7 @@ class ConsumerABC(ABC):
 
         self.loop = asyncio.get_event_loop()
         self.consumer = None
+        self.in_class = None
         self.a_init_ran = False
         self.a_init_ran_msg = f"Consumer object `a_init` method didn't run for {self}"
 
@@ -74,6 +75,33 @@ class ConsumerABC(ABC):
 
         return self._decorator(set_queue_label, *args, **kwargs)
 
+    def parse_decorated_args(self, args_list, kwargs_list):
+        args_error_msg = "Please use only one argument (and optional 'self' arg in classes)" + \
+                         " for the message to be passed."
+
+        if kwargs_list:
+            kw_error_msg = "No keyword arguments allowed. "
+            raise ValueError(args_error_msg + kw_error_msg)
+        if len(args_list) > 1:
+            raise ValueError(args_error_msg)
+
+        # Run this logic only on the first decorator run since the
+        # 'self' argument may not be passed into bound methods on
+        # subsequent runs
+        if self.in_class is None:
+            if args_list:
+                self.self_obj, *_ = args_list
+                self.in_class = True
+            else:
+                self.in_class = False
+
+    async def call_decorated(self, func, msg, w_args, w_kwargs):
+        self.parse_decorated_args(w_args, w_kwargs)
+        if self.in_class:
+            await func(self.self_obj, msg)
+        else:
+            await func(msg)
+
     @abstractmethod
     def _decorator(self, set_queue_label, *args, **kwargs):
         def wrapper(func):
@@ -85,8 +113,9 @@ class ConsumerABC(ABC):
                 '''
                 while True:
                     async for msg in self.consumer:
-                        # Decorated function comes in here
-                        await func(msg, *w_args, **w_kwargs)
+                        # Decorated function 'func' comes in here
+                        await self.call_decorated(func, msg, w_args, w_kwargs)
+
             return wrapped
         return wrapper
 
@@ -129,7 +158,6 @@ class KafkaConsumerLoop(ConsumerABC):
 
                 while True:
                     async for msg in self.consumer:
-                        log.info('Got a message')
                         valid_raw_msg = (msg.key == self.queues_labels[self.queue_name]['uuid'])
                         log.debug(f"Agent uuid matches Kafka msg key received?: {valid_raw_msg}")
                         if valid_raw_msg:
@@ -138,8 +166,8 @@ class KafkaConsumerLoop(ConsumerABC):
                                 if not isinstance(msg, (str, bytes, bytearray)) \
                                 else msg
 
-                            # Decorated function comes in here
-                            await func(msg, *w_args, **w_kwargs)
+                            # Decorated function 'func' comes in here
+                            await self.call_decorated(func, msg, w_args, w_kwargs)
 
             return wrapped
         return wrapper
@@ -164,10 +192,9 @@ class AsyncIOConsumerLoop(ConsumerABC):
                 """
                 while True:
                     async for msg in self.consumer:
-                        log.info('Got a message')
+                        # Decorated function 'func' comes in here
+                        await self.call_decorated(func, msg, w_args, w_kwargs)
 
-                        # Decorated function comes in here
-                        await func(msg, *w_args, **w_kwargs)
             return wrapped
         return wrapper
 
@@ -237,8 +264,8 @@ class RMQIOConsumerLoop(ConsumerABC):
                             async with msg.process():
                                 msg = msg.body
 
-                                # Decorated function comes in here
-                                await func(msg, *w_args, **w_kwargs)
+                                # Decorated function 'func' comes in here
+                                await self.call_decorated(func, msg, w_args, w_kwargs)
 
             return wrapped
         return wrapper
