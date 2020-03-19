@@ -1,5 +1,6 @@
 import asyncio
 from functools import wraps
+import inspect
 import json
 import logging
 import os
@@ -77,7 +78,7 @@ class ConsumerABC(ABC):
 
         return self._decorator(set_queue_label, *args, **kwargs)
 
-    def parse_decorated_args(self, args_list, kwargs_list):
+    def parse_decorated_args(self, func, args_list, kwargs_list):
         args_error_msg = "Please use only one argument (and optional 'self' arg in classes)" + \
                          " for the message to be passed."
 
@@ -91,6 +92,14 @@ class ConsumerABC(ABC):
         if args_list:
             self_obj, *_ = args_list
 
+            self_members = dict(inspect.getmembers(self_obj.__class__))
+            func_in_class = self_members.get(func.__name__)
+            assert func_in_class and \
+                   inspect.isroutine(func) and \
+                   (func.__qualname__ == func_in_class.__qualname__), \
+                "First argument must be either 'self/cls' inside a class object. " + \
+                "Only one argument allowed otherwise for unbound functions."
+
         # Save 'self_obj' to consumer class instance on first run
         if self.in_class is None:
             self.self_obj = self_obj
@@ -99,7 +108,7 @@ class ConsumerABC(ABC):
         return self_obj
 
     async def call_decorated(self, func, msg, w_args, w_kwargs):
-        self_obj = self.parse_decorated_args(w_args, w_kwargs)
+        self_obj = self.parse_decorated_args(func, w_args, w_kwargs)
         if self.in_class:
             try:
                 assert self_obj == self.self_obj, \
