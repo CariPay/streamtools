@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 
 from kafka import KafkaProducer as ProducerFromKafka
 import aio_pika
+from pamqp.specification import Basic
 
 from .libs import log, clean_queue_label, check_queue_type
 from .libs import HTTP_HOST, RMQ_USER, RMQ_PASS, RMQ_HOST, KAFKA_HOST, ENCODING
@@ -188,6 +189,11 @@ class RMQIOProducer(ProducerABC):
     messages around.
     '''
     QUEUE_TYPE = ["RabbitMQ"]
+    RESP = {
+        "Basic.Ack": "Queue '{}', got back 'Ack' (success)",
+        "Basic.Nack": "Queue '{}', got back 'Nack' (failure)",
+        "Basic.Reject": "Queue '{}', got back 'Reject' (failure)",
+    }
 
     def __init__(self, queue_name, queues_labels={}, **kwargs):
         super().__init__(queue_name, queues_labels, **kwargs)
@@ -210,9 +216,12 @@ class RMQIOProducer(ProducerABC):
         if self.channel.is_closed:
             self.channel = await self.connection.channel()
 
-        await self.channel.default_exchange.publish(
+        resp = await self.channel.default_exchange.publish(
             aio_pika.Message(
                 body=msg.encode()
             ),
             routing_key=self.routing_key
         )
+
+        resp_msg = self.RESP.get(resp.name) or "Queue '{}', invalid response received from rabbitmq server"
+        log.info(resp_msg.format(self.routing_key))
