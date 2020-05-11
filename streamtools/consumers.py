@@ -12,6 +12,7 @@ from abc import ABC, abstractmethod
 from aiohttp import web
 from aiokafka import AIOKafkaConsumer
 import aio_pika
+import boto3
 
 from .libs import log, log_error, TRACEBACK, clean_queue_label, get_free_port, \
                   check_queue_type, AsyncioQueue, ClassRouteTableDef
@@ -212,6 +213,37 @@ class AsyncIOConsumerLoop(ConsumerABC):
                     async for msg in self.consumer:
                         # Decorated function 'func' comes in here
                         await self.call_decorated(func, msg, w_args, w_kwargs)
+
+            return wrapped
+        return wrapper
+
+class SQSConsumerLoop(ConsumerABC):
+    '''
+    Uses AWS SQS to pass messages around.
+    '''
+    QUEUE_TYPE = ["SQS"]
+    LOOP = asyncio.get_event_loop()
+
+    sqs = boto3.resource('sqs')
+
+    def __init__(self, queue_name, queues_labels={}, **kwargs):
+        super().__init__(queue_name, queues_labels, **kwargs)
+        self.queue = self.sqs.get_queue_by_name(QueueName=self.queue_label)
+
+    def _decorator(self, set_queue_label, *args, **kwargs):
+        def wrapper(func):
+            @wraps(func)
+            def wrapped(*w_args, **w_kwargs):
+                """
+                Message processing loop decorator to be added to `start` task.
+                """
+                while True:
+                    messages = self.queue.receive_messages(WaitTimeSeconds=5)
+                    for msg in messages:
+                        # Decorated function 'func' comes in here
+                        log.info(f"SQS message received: {msg}")
+                        self.LOOP.run_until_complete(self.call_decorated(func, msg.body, w_args, w_kwargs))
+                        msg.delete()
 
             return wrapped
         return wrapper
