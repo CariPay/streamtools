@@ -134,6 +134,10 @@ class ConsumerABC(ABC):
                 '''
                 while True:
                     async for msg in self.consumer:
+                        msg = {
+                            "queue_type": self.QUEUE_TYPE[0],
+                            "msg": msg
+                        }
                         # Decorated function 'func' comes in here
                         await self.call_decorated(func, msg, w_args, w_kwargs)
 
@@ -187,6 +191,10 @@ class KafkaConsumerLoop(ConsumerABC):
                                 if not isinstance(msg, (str, bytes, bytearray)) \
                                 else msg
 
+                            msg = {
+                                "queue_type": self.QUEUE_TYPE[0],
+                                "msg": msg
+                            }
                             # Decorated function 'func' comes in here
                             await self.call_decorated(func, msg, w_args, w_kwargs)
 
@@ -213,6 +221,10 @@ class AsyncIOConsumerLoop(ConsumerABC):
                 """
                 while True:
                     async for msg in self.consumer:
+                        msg = {
+                            "queue_type": self.QUEUE_TYPE[0],
+                            "msg": msg
+                        }
                         # Decorated function 'func' comes in here
                         await self.call_decorated(func, msg, w_args, w_kwargs)
 
@@ -261,13 +273,16 @@ class SQSConsumerLoop(ConsumerABC):
                                     log.info(f"SQS message received: {msg}")
                                     msg_body = msg.get('Body')
                                     log.info(f"Message body: {msg_body}")
+                                    msg = {
+                                        "queue_type": self.QUEUE_TYPE[0],
+                                        "msg": msg_body,
+                                        "delete_func": client.delete_message,
+                                        "QueueUrl": queue_url,
+                                        "ReceiptHandle": msg['ReceiptHandle'],
+                                    }
                                     # Decorated function 'func' comes in here
-                                    await self.call_decorated(func, msg_body, w_args, w_kwargs)
+                                    await self.call_decorated(func, msg, w_args, w_kwargs)
 
-                                    await client.delete_message(
-                                        QueueUrl=queue_url,
-                                        ReceiptHandle=msg['ReceiptHandle']
-                                    )
                         except Exception as e:
                             pass
 
@@ -338,8 +353,10 @@ class RMQIOConsumerLoop(ConsumerABC):
                         # Cancel consuming after __aexit__
                         async for msg in consumer:
                             async with msg.process():
-                                msg = msg.body
-
+                                msg = {
+                                    "queue_type": self.QUEUE_TYPE[0],
+                                    "msg": msg.body
+                                }
                                 # Decorated function 'func' comes in here
                                 await self.call_decorated(func, msg, w_args, w_kwargs)
 
