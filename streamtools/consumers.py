@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import socket
+import sys
 import time
 import traceback
 from abc import ABC, abstractmethod
@@ -12,6 +13,8 @@ from abc import ABC, abstractmethod
 from aiohttp import web
 from aiokafka import AIOKafkaConsumer
 import aio_pika
+import aiobotocore
+import botocore.exceptions
 
 from .libs import log, log_error, TRACEBACK, clean_queue_label, get_free_port, \
                   check_queue_type, AsyncioQueue, ClassRouteTableDef
@@ -212,6 +215,61 @@ class AsyncIOConsumerLoop(ConsumerABC):
                     async for msg in self.consumer:
                         # Decorated function 'func' comes in here
                         await self.call_decorated(func, msg, w_args, w_kwargs)
+
+            return wrapped
+        return wrapper
+
+class SQSConsumerLoop(ConsumerABC):
+    '''
+    Uses AWS SQS to pass messages around.
+    '''
+    QUEUE_TYPE = ["SQS"]
+    LOOP = asyncio.get_event_loop()
+
+    def __init__(self, queue_name, queues_labels={}, **kwargs):
+        super().__init__(queue_name, queues_labels, **kwargs)
+
+    def _decorator(self, set_queue_label, *args, **kwargs):
+        def wrapper(func):
+            @wraps(func)
+            async def wrapped(*w_args, **w_kwargs):
+                """
+                Message processing loop decorator to be added to `start` task.
+                """
+                session = aiobotocore.get_session()
+                async with session.create_client('sqs', region_name='us-east-1') as client:
+                    try:
+                        response = await client.get_queue_url(QueueName=self.queue_label)
+                    except botocore.exceptions.ClientError as err:
+                        if err.response['Error']['Code'] == \
+                                'AWS.SimpleQueueService.NonExistentQueue':
+                            print("Queue {0} does not exist".format(self.queue_label))
+                            sys.exit(1)
+                        else:
+                            raise
+
+                    queue_url = response['QueueUrl']
+                    while True:
+                        try:
+                            response = await client.receive_message(
+                                QueueUrl=queue_url,
+                                WaitTimeSeconds=2,
+                            )
+
+                            if 'Messages' in response:
+                                for msg in response['Messages']:
+                                    log.info(f"SQS message received: {msg}")
+                                    msg_body = msg.get('Body')
+                                    log.info(f"Message body: {msg_body}")
+                                    # Decorated function 'func' comes in here
+                                    await self.call_decorated(func, msg_body, w_args, w_kwargs)
+
+                                    await client.delete_message(
+                                        QueueUrl=queue_url,
+                                        ReceiptHandle=msg['ReceiptHandle']
+                                    )
+                        except Exception as e:
+                            pass
 
             return wrapped
         return wrapper

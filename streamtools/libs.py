@@ -36,7 +36,7 @@ def log_error(error, with_traceback=TRACEBACK):
     return str(error)
 
 def clean_queue_label(string):
-    pattern = re.compile('[^a-zA-Z0-9-_]+', re.UNICODE)
+    pattern = re.compile('[^a-zA-Z0-9-_\.]+', re.UNICODE)
     cleaned_string = pattern.sub('', string)
     return cleaned_string
 

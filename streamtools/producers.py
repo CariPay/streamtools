@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 
 from kafka import KafkaProducer as ProducerFromKafka
 import aio_pika
+import boto3
 
 from .libs import log, clean_queue_label, check_queue_type
 from .libs import HTTP_HOST, RMQ_USER, RMQ_PASS, RMQ_HOST, KAFKA_HOST, ENCODING
@@ -180,6 +181,29 @@ class AsyncIOProducer(ProducerABC):
         assert self.producer != None, \
             "Producer queue object is not set"
         await self.producer.put(msg)
+
+
+class SQSProducer(ProducerABC):
+    '''
+    Uses AWS SQS to pass messages around.
+    '''
+    QUEUE_TYPE = ["SQS"]
+
+    sqs = boto3.resource('sqs')
+
+    def __init__(self, queue_name, queues_labels={}, **kwargs):
+        super().__init__(queue_name, queues_labels, **kwargs)
+        print("HERE:", self.queue_label)
+        self.queue = self.sqs.get_queue_by_name(QueueName=self.queue_label)
+        self.producer = None
+
+    async def send(self, msg, *args, **kwargs):
+        response = self.queue.send_message(MessageBody=msg, MessageGroupId='default')
+
+        # The response is not a resource, but gives you a message ID and MD5
+        msgId, md5 = response.get('MessageId'), response.get('MD5OfMessageBody')
+        print(f"MessageId created: {msgId}")
+        print(f"MD5 created: {md5}")
 
 
 class RMQIOProducer(ProducerABC):
