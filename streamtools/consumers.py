@@ -276,14 +276,13 @@ class SQSConsumerLoop(ConsumerABC):
                                     msg = {
                                         "queue_type": self.QUEUE_TYPE[0],
                                         "msg": msg_body,
+                                        "delete_func": client.delete_message,
+                                        "QueueUrl": queue_url,
+                                        "ReceiptHandle": msg['ReceiptHandle'],
                                     }
                                     # Decorated function 'func' comes in here
                                     await self.call_decorated(func, msg, w_args, w_kwargs)
 
-                                    await client.delete_message(
-                                        QueueUrl=queue_url,
-                                        ReceiptHandle=msg['ReceiptHandle']
-                                    )
                         except Exception as e:
                             pass
 
