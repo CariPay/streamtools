@@ -1,9 +1,11 @@
 import asyncio
 from functools import wraps
+import inspect
 import json
 import logging
 import os
 import socket
+import sys
 import time
 import traceback
 from abc import ABC, abstractmethod
@@ -11,8 +13,11 @@ from abc import ABC, abstractmethod
 from aiohttp import web
 from aiokafka import AIOKafkaConsumer
 import aio_pika
+import aiobotocore
+import botocore.exceptions
 
-from .libs import log, clean_queue_label, get_free_port, check_queue_type, AsyncioQueue, ClassRouteTableDef
+from .libs import log, log_error, TRACEBACK, clean_queue_label, get_free_port, \
+                  check_queue_type, AsyncioQueue, ClassRouteTableDef
 from .libs import ENCODING, RMQ_USER, RMQ_PASS, RMQ_HOST, KAFKA_HOST
 
 
@@ -35,6 +40,8 @@ class ConsumerABC(ABC):
 
         self.loop = asyncio.get_event_loop()
         self.consumer = None
+        self.in_class = None
+        self.self_obj = None
         self.a_init_ran = False
         self.a_init_ran_msg = f"Consumer object `a_init` method didn't run for {self}"
 
@@ -74,6 +81,48 @@ class ConsumerABC(ABC):
 
         return self._decorator(set_queue_label, *args, **kwargs)
 
+    def parse_decorated_args(self, func, args_list, kwargs_list):
+        args_error_msg = "Please use only one argument (and optional 'self' arg in classes)" + \
+                         " for the message to be passed."
+
+        if kwargs_list:
+            kw_error_msg = "No keyword arguments allowed. "
+            raise ValueError(args_error_msg + kw_error_msg)
+        if len(args_list) > 1:
+            raise ValueError(args_error_msg)
+
+        self_obj = None
+        if args_list:
+            self_obj, *_ = args_list
+
+            self_members = dict(inspect.getmembers(self_obj.__class__))
+            func_in_class = self_members.get(func.__name__)
+            assert func_in_class and \
+                   inspect.isroutine(func) and \
+                   (func.__qualname__ == func_in_class.__qualname__), \
+                "First argument must be either 'self/cls' inside a class object. " + \
+                "Only one argument allowed otherwise for unbound functions."
+
+        # Save 'self_obj' to consumer class instance on first run
+        if self.in_class is None:
+            self.self_obj = self_obj
+            self.in_class = True if args_list else False
+
+        return self_obj
+
+    async def call_decorated(self, func, msg, w_args, w_kwargs):
+        self_obj = self.parse_decorated_args(func, w_args, w_kwargs)
+        if self.in_class:
+            try:
+                assert self_obj == self.self_obj, \
+                    "'self/cls' argument not being consistently passed into class method"
+                await func(self_obj, msg)
+            except AssertionError as e:
+                error_msg = log_error(e, with_traceback=TRACEBACK)
+                await func(self.self_obj, msg)
+        else:
+            await func(msg)
+
     @abstractmethod
     def _decorator(self, set_queue_label, *args, **kwargs):
         def wrapper(func):
@@ -85,8 +134,9 @@ class ConsumerABC(ABC):
                 '''
                 while True:
                     async for msg in self.consumer:
-                        # Decorated function comes in here
-                        await func(msg, *w_args, **w_kwargs)
+                        # Decorated function 'func' comes in here
+                        await self.call_decorated(func, msg, w_args, w_kwargs)
+
             return wrapped
         return wrapper
 
@@ -129,7 +179,6 @@ class KafkaConsumerLoop(ConsumerABC):
 
                 while True:
                     async for msg in self.consumer:
-                        log.info('Got a message')
                         valid_raw_msg = (msg.key == self.queues_labels[self.queue_name]['uuid'])
                         log.debug(f"Agent uuid matches Kafka msg key received?: {valid_raw_msg}")
                         if valid_raw_msg:
@@ -138,8 +187,8 @@ class KafkaConsumerLoop(ConsumerABC):
                                 if not isinstance(msg, (str, bytes, bytearray)) \
                                 else msg
 
-                            # Decorated function comes in here
-                            await func(msg, *w_args, **w_kwargs)
+                            # Decorated function 'func' comes in here
+                            await self.call_decorated(func, msg, w_args, w_kwargs)
 
             return wrapped
         return wrapper
@@ -164,10 +213,64 @@ class AsyncIOConsumerLoop(ConsumerABC):
                 """
                 while True:
                     async for msg in self.consumer:
-                        log.info('Got a message')
+                        # Decorated function 'func' comes in here
+                        await self.call_decorated(func, msg, w_args, w_kwargs)
 
-                        # Decorated function comes in here
-                        await func(msg, *w_args, **w_kwargs)
+            return wrapped
+        return wrapper
+
+class SQSConsumerLoop(ConsumerABC):
+    '''
+    Uses AWS SQS to pass messages around.
+    '''
+    QUEUE_TYPE = ["SQS"]
+    LOOP = asyncio.get_event_loop()
+
+    def __init__(self, queue_name, queues_labels={}, **kwargs):
+        super().__init__(queue_name, queues_labels, **kwargs)
+
+    def _decorator(self, set_queue_label, *args, **kwargs):
+        def wrapper(func):
+            @wraps(func)
+            async def wrapped(*w_args, **w_kwargs):
+                """
+                Message processing loop decorator to be added to `start` task.
+                """
+                session = aiobotocore.get_session()
+                async with session.create_client('sqs', region_name='us-east-1') as client:
+                    try:
+                        response = await client.get_queue_url(QueueName=self.queue_label)
+                    except botocore.exceptions.ClientError as err:
+                        if err.response['Error']['Code'] == \
+                                'AWS.SimpleQueueService.NonExistentQueue':
+                            print("Queue {0} does not exist".format(self.queue_label))
+                            sys.exit(1)
+                        else:
+                            raise
+
+                    queue_url = response['QueueUrl']
+                    while True:
+                        try:
+                            response = await client.receive_message(
+                                QueueUrl=queue_url,
+                                WaitTimeSeconds=2,
+                            )
+
+                            if 'Messages' in response:
+                                for msg in response['Messages']:
+                                    log.info(f"SQS message received: {msg}")
+                                    msg_body = msg.get('Body')
+                                    log.info(f"Message body: {msg_body}")
+                                    # Decorated function 'func' comes in here
+                                    await self.call_decorated(func, msg_body, w_args, w_kwargs)
+
+                                    await client.delete_message(
+                                        QueueUrl=queue_url,
+                                        ReceiptHandle=msg['ReceiptHandle']
+                                    )
+                        except Exception as e:
+                            pass
+
             return wrapped
         return wrapper
 
@@ -237,8 +340,8 @@ class RMQIOConsumerLoop(ConsumerABC):
                             async with msg.process():
                                 msg = msg.body
 
-                                # Decorated function comes in here
-                                await func(msg, *w_args, **w_kwargs)
+                                # Decorated function 'func' comes in here
+                                await self.call_decorated(func, msg, w_args, w_kwargs)
 
             return wrapped
         return wrapper
