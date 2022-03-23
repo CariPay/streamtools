@@ -20,7 +20,7 @@ from .libs import log, log_error, TRACEBACK, clean_queue_label, get_free_port, \
                   check_queue_type, AsyncioQueue, ClassRouteTableDef
 from .libs import ENCODING, RMQ_USER, RMQ_PASS, RMQ_HOST, KAFKA_HOST
 
-
+AWS_REGION_NAME = os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
 class ConsumerABC(ABC):
     '''
     An abstract base class for defining consumer decorator loops
@@ -237,7 +237,8 @@ class SQSConsumerLoop(ConsumerABC):
                 Message processing loop decorator to be added to `start` task.
                 """
                 session = aiobotocore.get_session()
-                async with session.create_client('sqs', region_name='us-east-1') as client:
+                print('SQS Region: {0}'.format(AWS_REGION_NAME))
+                async with session.create_client('sqs', region_name=AWS_REGION_NAME) as client:
                     try:
                         response = await client.get_queue_url(QueueName=self.queue_label)
                     except botocore.exceptions.ClientError as err:
