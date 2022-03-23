@@ -20,6 +20,12 @@ from .libs import log, log_error, TRACEBACK, clean_queue_label, get_free_port, \
                   check_queue_type, AsyncioQueue, ClassRouteTableDef
 from .libs import ENCODING, RMQ_USER, RMQ_PASS, RMQ_HOST, KAFKA_HOST
 
+SQS_CONNECT_DEFAULT_TRIES = 5
+try:
+    SQS_CONNECT_TRIES = int(os.environ.get('SQS_CONNECT_TRIES', 5))
+except Exception as e:
+    SQS_CONNECT_TRIES = 5
+
 
 class ConsumerABC(ABC):
     '''
@@ -238,15 +244,29 @@ class SQSConsumerLoop(ConsumerABC):
                 """
                 session = aiobotocore.get_session()
                 async with session.create_client('sqs', region_name='us-east-1') as client:
-                    try:
-                        response = await client.get_queue_url(QueueName=self.queue_label)
-                    except botocore.exceptions.ClientError as err:
-                        if err.response['Error']['Code'] == \
-                                'AWS.SimpleQueueService.NonExistentQueue':
-                            print("Queue {0} does not exist".format(self.queue_label))
-                            sys.exit(1)
-                        else:
-                            raise
+                    count = 0
+                    while count < SQS_CONNECT_TRIES:
+                        count += 1
+                        try:
+                            log.info(f"Connecting to SQS queue '{self.queue_label}'")
+                            response = await client.get_queue_url(QueueName=self.queue_label)
+                            log.info(f"Connected ('{self.queue_label}')")
+                            break
+
+                        except botocore.exceptions.ClientError as err:
+                            if err.response['Error']['Code'] == \
+                                    'AWS.SimpleQueueService.NonExistentQueue':
+                                log.info("Queue {0} does not exist".format(self.queue_label))
+
+                                if count >= SQS_CONNECT_TRIES:
+                                    log.error(f"Couldn't connect after {count} tries, exiting...")
+                                    sys.exit(1)
+                                else:
+                                    time.sleep(1)
+                                    log.info(f"Retrying connect to SQS queue '{self.queue_label}' (attempt #{count} of {SQS_CONNECT_TRIES})")
+
+                            else:
+                                raise
 
                     queue_url = response['QueueUrl']
                     while True:
