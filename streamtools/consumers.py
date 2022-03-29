@@ -11,9 +11,9 @@ import traceback
 from abc import ABC, abstractmethod
 
 from aiohttp import web
+from aiobotocore.session import get_session
 from aiokafka import AIOKafkaConsumer
 import aio_pika
-import aiobotocore
 import botocore.exceptions
 
 from .libs import log, log_error, TRACEBACK, clean_queue_label, get_free_port, \
@@ -236,7 +236,7 @@ class SQSConsumerLoop(ConsumerABC):
                 """
                 Message processing loop decorator to be added to `start` task.
                 """
-                session = aiobotocore.get_session()
+                session = get_session()
                 print('SQS Region: {0}'.format(AWS_REGION_NAME))
                 async with session.create_client('sqs', region_name=AWS_REGION_NAME) as client:
                     try:
