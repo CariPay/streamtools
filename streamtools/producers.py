@@ -7,8 +7,8 @@ import time
 import traceback
 from abc import ABC, abstractmethod
 
-from kafka import KafkaProducer as ProducerFromKafka
-import aio_pika
+# from kafka import KafkaProducer as ProducerFromKafka
+# import aio_pika
 import boto3
 
 from .libs import log, clean_queue_label, check_queue_type
@@ -57,58 +57,58 @@ class ProducerABC(ABC):
 
 
 
-class KafkaProducer(ProducerABC):
-    '''
-    Uses the `KafkaProducer` class from the
-    aiokafka library to publish messages
-    directly to a Kafka broker.
-    '''
-    QUEUE_TYPE = ["Kafka"]
+# class KafkaProducer(ProducerABC):
+#     '''
+#     Uses the `KafkaProducer` class from the
+#     aiokafka library to publish messages
+#     directly to a Kafka broker.
+#     '''
+#     QUEUE_TYPE = ["Kafka"]
 
-    def __init__(self, queue_name, queues_labels={}, **kwargs):
-        super().__init__(queue_name, queues_labels, **kwargs)
-        self.topic = self.queue_label
+#     def __init__(self, queue_name, queues_labels={}, **kwargs):
+#         super().__init__(queue_name, queues_labels, **kwargs)
+#         self.topic = self.queue_label
 
-        start = time.time()
-        log.info(f"Starting kafka producer for '{self.topic}' topic")
-        self._producer = ProducerFromKafka(
-            acks=1,
-            batch_size=1,  # @TODO: config-able
-            bootstrap_servers=KAFKA_HOST,
-            api_version=(1, 0, 0),
-            key_serializer=lambda v: str(v).encode(ENCODING),
-            value_serializer=lambda v: json.dumps(v).encode(ENCODING)
-        )
-        end = time.time()
-        log.info(f"Got '{self.topic}' kafka producer in {round(end - start, 2)}s!")
+#         start = time.time()
+#         log.info(f"Starting kafka producer for '{self.topic}' topic")
+#         self._producer = ProducerFromKafka(
+#             acks=1,
+#             batch_size=1,  # @TODO: config-able
+#             bootstrap_servers=KAFKA_HOST,
+#             api_version=(1, 0, 0),
+#             key_serializer=lambda v: str(v).encode(ENCODING),
+#             value_serializer=lambda v: json.dumps(v).encode(ENCODING)
+#         )
+#         end = time.time()
+#         log.info(f"Got '{self.topic}' kafka producer in {round(end - start, 2)}s!")
 
-    def add_agent_uuid(self, **kwargs_from_agent):
-        self.key = kwargs_from_agent[self.QUEUE_TYPE[0]]
+#     def add_agent_uuid(self, **kwargs_from_agent):
+#         self.key = kwargs_from_agent[self.QUEUE_TYPE[0]]
 
-    def send(self, message, *args, **kwargs):
-        try:
-            # @TODO: pack message
+#     def send(self, message, *args, **kwargs):
+#         try:
+#             # @TODO: pack message
 
-            log.info('sending on topic {}'.format(self.topic))
-            log.info('sending message {}'.format(self.key))
+#             log.info('sending on topic {}'.format(self.topic))
+#             log.info('sending message {}'.format(self.key))
 
-            future = self._producer.send(
-                self.topic,
-                key=self.key,
-                value=message
-            )
+#             future = self._producer.send(
+#                 self.topic,
+#                 key=self.key,
+#                 value=message
+#             )
 
-            future.get(timeout=5)
-            log.info('sent message {}'.format(self.key))
+#             future.get(timeout=5)
+#             log.info('sent message {}'.format(self.key))
 
-            return True
+#             return True
 
-        except Exception as e:
-            log.error('Failed to send: ')
-            log.error(e)
-            traceback.print_exc()
+#         except Exception as e:
+#             log.error('Failed to send: ')
+#             log.error(e)
+#             traceback.print_exc()
 
-            return None
+#             return None
 
 
 class HTTPProducer(ProducerABC):
@@ -121,7 +121,7 @@ class HTTPProducer(ProducerABC):
     \"msg_topic\": for the relevant kafka topic queue\n
     \"msg_key\": to link back messages to the agent
     '''
-    QUEUE_TYPE = ["HTTP", "Kafka", "RabbitMQ"]
+    QUEUE_TYPE = ["HTTP"]
 
     HEADERS = {
         "JSON": {'content-type': 'application/json'},
@@ -206,37 +206,37 @@ class SQSProducer(ProducerABC):
         print(f"MD5 created: {md5}")
 
 
-class RMQIOProducer(ProducerABC):
-    '''
-    Uses an external RabbitMQ broker queue to pass
-    messages around.
-    '''
-    QUEUE_TYPE = ["RabbitMQ"]
+# class RMQIOProducer(ProducerABC):
+#     '''
+#     Uses an external RabbitMQ broker queue to pass
+#     messages around.
+#     '''
+#     QUEUE_TYPE = ["RabbitMQ"]
 
-    def __init__(self, queue_name, queues_labels={}, **kwargs):
-        super().__init__(queue_name, queues_labels, **kwargs)
-        self.loop = asyncio.get_event_loop()
-        self.routing_key = self.queue_label
-        self.host = RMQ_HOST
+#     def __init__(self, queue_name, queues_labels={}, **kwargs):
+#         super().__init__(queue_name, queues_labels, **kwargs)
+#         self.loop = asyncio.get_event_loop()
+#         self.routing_key = self.queue_label
+#         self.host = RMQ_HOST
 
-    async def a_init(self):
-        rmq_url = f"amqp://{RMQ_USER}:{RMQ_PASS}@{self.host}/"
-        log.info(f"Producer connecting to ip <{self.host}> with topic <{self.routing_key}>")
-        self.connection = await aio_pika.connect_robust(rmq_url,loop=self.loop) \
-                                    if not self.queue_from_consumer else self.queue_from_consumer
-        self.channel = await self.connection.channel()
+#     async def a_init(self):
+#         rmq_url = f"amqp://{RMQ_USER}:{RMQ_PASS}@{self.host}/"
+#         log.info(f"Producer connecting to ip <{self.host}> with topic <{self.routing_key}>")
+#         self.connection = await aio_pika.connect_robust(rmq_url,loop=self.loop) \
+#                                     if not self.queue_from_consumer else self.queue_from_consumer
+#         self.channel = await self.connection.channel()
 
-    def add_agent_uuid(self, **kwargs_from_agent):
-        self.key = kwargs_from_agent[self.QUEUE_TYPE[0]]
-        self.routing_key += f"-{self.key[:5]}"
+#     def add_agent_uuid(self, **kwargs_from_agent):
+#         self.key = kwargs_from_agent[self.QUEUE_TYPE[0]]
+#         self.routing_key += f"-{self.key[:5]}"
 
-    async def send(self, msg, *args, **kwargs):
-        if self.channel.is_closed:
-            self.channel = await self.connection.channel()
+#     async def send(self, msg, *args, **kwargs):
+#         if self.channel.is_closed:
+#             self.channel = await self.connection.channel()
 
-        await self.channel.default_exchange.publish(
-            aio_pika.Message(
-                body=msg.encode()
-            ),
-            routing_key=self.routing_key
-        )
+#         await self.channel.default_exchange.publish(
+#             aio_pika.Message(
+#                 body=msg.encode()
+#             ),
+#             routing_key=self.routing_key
+#         )

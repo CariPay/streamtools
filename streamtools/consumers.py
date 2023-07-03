@@ -12,8 +12,8 @@ from abc import ABC, abstractmethod
 
 from aiohttp import web
 from aiobotocore.session import get_session
-from aiokafka import AIOKafkaConsumer
-import aio_pika
+# from aiokafka import AIOKafkaConsumer
+# import aio_pika
 import botocore.exceptions
 
 from .libs import log, log_error, TRACEBACK, clean_queue_label, get_free_port, \
@@ -142,56 +142,56 @@ class ConsumerABC(ABC):
 
 
 
-class KafkaConsumerLoop(ConsumerABC):
-    '''
-    Uses the `AIOKafkaConsumer` decorator class from
-    the aiokafka library to consume messages from a
-    Kafka broker.
+# class KafkaConsumerLoop(ConsumerABC):
+#     '''
+#     Uses the `AIOKafkaConsumer` decorator class from
+#     the aiokafka library to consume messages from a
+#     Kafka broker.
 
-    This object currently will not work for decorating
-    an unbound method.
-    '''
-    QUEUE_TYPE = ["Kafka"]
+#     This object currently will not work for decorating
+#     an unbound method.
+#     '''
+#     QUEUE_TYPE = ["Kafka"]
 
-    def __init__(self, queue_name, queues_labels={}, **kwargs):
-        super().__init__(queue_name, queues_labels, **kwargs)
-        self.topic = self.queue_label
-        self.consumer = AIOKafkaConsumer(
-            self.topic,
-            loop=self.loop, bootstrap_servers=KAFKA_HOST,
-            key_deserializer=lambda v: v.decode(ENCODING),
-            value_deserializer=lambda v: json.loads(v.decode(ENCODING)),
-            #group_id="my-group"
-        )
+#     def __init__(self, queue_name, queues_labels={}, **kwargs):
+#         super().__init__(queue_name, queues_labels, **kwargs)
+#         self.topic = self.queue_label
+#         self.consumer = AIOKafkaConsumer(
+#             self.topic,
+#             loop=self.loop, bootstrap_servers=KAFKA_HOST,
+#             key_deserializer=lambda v: v.decode(ENCODING),
+#             value_deserializer=lambda v: json.loads(v.decode(ENCODING)),
+#             #group_id="my-group"
+#         )
 
-    def _decorator(self, set_queue_label, *args, **kwargs):
-        def wrapper(func):
-            @wraps(func)
-            async def wrapped(*w_args, **w_kwargs):
-                """
-                Message processing loop decorator to be added to `start` task.
-                """
-                try:
-                    await self.consumer.start()
-                except AssertionError as e:
-                    log.error(e)
-                    log.info('continuing...')
+#     def _decorator(self, set_queue_label, *args, **kwargs):
+#         def wrapper(func):
+#             @wraps(func)
+#             async def wrapped(*w_args, **w_kwargs):
+#                 """
+#                 Message processing loop decorator to be added to `start` task.
+#                 """
+#                 try:
+#                     await self.consumer.start()
+#                 except AssertionError as e:
+#                     log.error(e)
+#                     log.info('continuing...')
 
-                while True:
-                    async for msg in self.consumer:
-                        valid_raw_msg = (msg.key == self.queues_labels[self.queue_name]['uuid'])
-                        log.debug(f"Agent uuid matches Kafka msg key received?: {valid_raw_msg}")
-                        if valid_raw_msg:
-                            msg = msg.value
-                            msg = json.dumps(msg) \
-                                if not isinstance(msg, (str, bytes, bytearray)) \
-                                else msg
+#                 while True:
+#                     async for msg in self.consumer:
+#                         valid_raw_msg = (msg.key == self.queues_labels[self.queue_name]['uuid'])
+#                         log.debug(f"Agent uuid matches Kafka msg key received?: {valid_raw_msg}")
+#                         if valid_raw_msg:
+#                             msg = msg.value
+#                             msg = json.dumps(msg) \
+#                                 if not isinstance(msg, (str, bytes, bytearray)) \
+#                                 else msg
 
-                            # Decorated function 'func' comes in here
-                            await self.call_decorated(func, msg, w_args, w_kwargs)
+#                             # Decorated function 'func' comes in here
+#                             await self.call_decorated(func, msg, w_args, w_kwargs)
 
-            return wrapped
-        return wrapper
+#             return wrapped
+#         return wrapper
 
 
 class AsyncIOConsumerLoop(ConsumerABC):
@@ -276,81 +276,81 @@ class SQSConsumerLoop(ConsumerABC):
         return wrapper
 
 
-class RMQIOConsumerLoop(ConsumerABC):
-    '''
-    Uses the `RMQIOConsumerLoop` decorator class
-    to consumer messages from a RabbitMQ queue.
-    '''
-    QUEUE_TYPE = ["RabbitMQ"]
+# class RMQIOConsumerLoop(ConsumerABC):
+#     '''
+#     Uses the `RMQIOConsumerLoop` decorator class
+#     to consumer messages from a RabbitMQ queue.
+#     '''
+#     QUEUE_TYPE = ["RabbitMQ"]
 
-    def __init__(self, queue_name, queues_labels={}, **kwargs):
-        super().__init__(queue_name, queues_labels, **kwargs)
-        self.routing_key = self.queue_label
-        self.host = RMQ_HOST
+#     def __init__(self, queue_name, queues_labels={}, **kwargs):
+#         super().__init__(queue_name, queues_labels, **kwargs)
+#         self.routing_key = self.queue_label
+#         self.host = RMQ_HOST
 
-    async def a_init(self):
-        log.info(f"Consumer connecting to ip <{self.host}> with topic <{self.routing_key}>")
-        tries, MAX_TRIES = 0, 10
-        SLEEP = 3
-        while tries < MAX_TRIES:
-            tries += 1
-            try:
-                rmq_url = f"amqp://{RMQ_USER}:{RMQ_PASS}@{self.host}/"
-                log.info(f"Connecting to RabbitMQ host at: {rmq_url}")
-                self.connection = self.queue_ref = \
-                    await aio_pika.connect_robust(rmq_url, loop=self.loop)
-                log.info(f"Successfully connected! {self} {rmq_url}")
-                tries = MAX_TRIES
-            except ConnectionError as e:
-                log.error(e)
-                time.sleep(SLEEP)
-                log.info(f"Retrying connect... ({tries} of {MAX_TRIES})")
-            except Exception as e:
-                log.error(e)
-                traceback.print_exc()
-                tries = MAX_TRIES
+#     async def a_init(self):
+#         log.info(f"Consumer connecting to ip <{self.host}> with topic <{self.routing_key}>")
+#         tries, MAX_TRIES = 0, 10
+#         SLEEP = 3
+#         while tries < MAX_TRIES:
+#             tries += 1
+#             try:
+#                 rmq_url = f"amqp://{RMQ_USER}:{RMQ_PASS}@{self.host}/"
+#                 log.info(f"Connecting to RabbitMQ host at: {rmq_url}")
+#                 self.connection = self.queue_ref = \
+#                     await aio_pika.connect_robust(rmq_url, loop=self.loop)
+#                 log.info(f"Successfully connected! {self} {rmq_url}")
+#                 tries = MAX_TRIES
+#             except ConnectionError as e:
+#                 log.error(e)
+#                 time.sleep(SLEEP)
+#                 log.info(f"Retrying connect... ({tries} of {MAX_TRIES})")
+#             except Exception as e:
+#                 log.error(e)
+#                 traceback.print_exc()
+#                 tries = MAX_TRIES
 
-        self.a_init_ran = True
+#         self.a_init_ran = True
 
-    def add_agent_uuid(self, **kwargs_from_agent):
-        self.key = kwargs_from_agent[self.QUEUE_TYPE[0]]
-        self.routing_key += f"-{self.key[:5]}"
+#     def add_agent_uuid(self, **kwargs_from_agent):
+#         self.key = kwargs_from_agent[self.QUEUE_TYPE[0]]
+#         self.routing_key += f"-{self.key[:5]}"
 
-    async def _create_channel_and_queue(self):
-        # Creating channel
-        self.channel = await self.connection.channel()    # type: aio_pika.Channel
+#     async def _create_channel_and_queue(self):
+#         # Creating channel
+#         self.channel = await self.connection.channel()    # type: aio_pika.Channel
 
-        # Declaring queue
-        self.queue = await self.channel.declare_queue(
-            self.routing_key,
-            auto_delete=False
-        )   # type: aio_pika.Queue
+#         # Declaring queue
+#         self.queue = await self.channel.declare_queue(
+#             self.routing_key,
+#             auto_delete=False
+#         )   # type: aio_pika.Queue
 
-    def _decorator(self, set_queue_label, *args, **kwargs):
-        def wrapper(func):
-            @wraps(func)
-            async def wrapped(*w_args, **w_kwargs):
-                """
-                Message processing loop decorator to be added to `start` task.
-                """
-                async with self.connection:
-                    await self._create_channel_and_queue()
-                    async with self.queue.iterator() as consumer:
-                        # Cancel consuming after __aexit__
-                        async for msg in consumer:
-                            async with msg.process():
-                                msg = msg.body
+#     def _decorator(self, set_queue_label, *args, **kwargs):
+#         def wrapper(func):
+#             @wraps(func)
+#             async def wrapped(*w_args, **w_kwargs):
+#                 """
+#                 Message processing loop decorator to be added to `start` task.
+#                 """
+#                 async with self.connection:
+#                     await self._create_channel_and_queue()
+#                     async with self.queue.iterator() as consumer:
+#                         # Cancel consuming after __aexit__
+#                         async for msg in consumer:
+#                             async with msg.process():
+#                                 msg = msg.body
 
-                                # Decorated function 'func' comes in here
-                                await self.call_decorated(func, msg, w_args, w_kwargs)
+#                                 # Decorated function 'func' comes in here
+#                                 await self.call_decorated(func, msg, w_args, w_kwargs)
 
-            return wrapped
-        return wrapper
+#             return wrapped
+#         return wrapper
 
 
 class HTTPConsumerLoop(ConsumerABC):
     '''
-    Uses the `RMQIOConsumerLoop` decorator class
+    Uses the `HTTPConsumerLoop` decorator class
     to consumer messages from a RabbitMQ queue.
     '''
     QUEUE_TYPE = ["HTTP"]

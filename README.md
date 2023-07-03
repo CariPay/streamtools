@@ -62,7 +62,7 @@ At a high level, the following is how someone could successfully implement a Pro
 
 ---
 
-### RabbitMQ
+### RabbitMQ - Deprecated
 Asynchronous messaging via the use of a RabbitMQ message broker and async queues.
 
 Both the Producer and Consumer additionally require 3 environment variables to be present:

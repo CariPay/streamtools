@@ -2,20 +2,16 @@ import asyncio
 from aiohttp import web
 from copy import deepcopy
 
-from .constants import KAFKA, ASYNCIO, RABBITMQ, HTTP, SQS
+from .constants import ASYNCIO, HTTP, SQS
 
 from .consumers import \
-    KafkaConsumerLoop, \
     AsyncIOConsumerLoop, \
-    RMQIOConsumerLoop, \
     HTTPConsumerLoop, \
     SQSConsumerLoop
 
 from .producers import \
-    KafkaProducer, \
     HTTPProducer, \
     AsyncIOProducer, \
-    RMQIOProducer, \
     SQSProducer
 
 from .libs import prepare_aiohttp_app, check_queue_type, log
@@ -25,17 +21,13 @@ LOOP = asyncio.get_event_loop()
 
 CONSUMER_LOOPS = {
     HTTP: HTTPConsumerLoop,
-    RABBITMQ: RMQIOConsumerLoop,
     ASYNCIO: AsyncIOConsumerLoop,
-    KAFKA: KafkaConsumerLoop,
     SQS: SQSConsumerLoop
 }
 
 PRODUCERS = {
     HTTP: HTTPProducer,
-    RABBITMQ: RMQIOProducer,
     ASYNCIO: AsyncIOProducer,
-    KAFKA: KafkaProducer,
     SQS: SQSProducer
 }
 
