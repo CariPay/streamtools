@@ -9,7 +9,7 @@ setup(
         'aiokafka==0.5.1',
         'aio-pika==5.6.0',
         'boto3==1.39.0',
-        'aiobotocore==2.0.1',
+        'aiobotocore==2.25.0',
       ],
     license='Creative Commons Attribution-Noncommercial-Share Alike license',
 )
