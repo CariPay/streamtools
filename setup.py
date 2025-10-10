@@ -6,7 +6,7 @@ setup(
     packages=['streamtools',],
     install_requires=[
         'aiohttp==3.13.0',
-        'aiokafka==0.5.1',
+        'aiokafka==0.12.0',
         'aio-pika==5.6.0',
         'boto3==1.40.49',
         'aiobotocore==2.25.0',
