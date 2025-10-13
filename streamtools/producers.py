@@ -7,7 +7,7 @@ import time
 import traceback
 from abc import ABC, abstractmethod
 
-from kafka import KafkaProducer as ProducerFromKafka
+from aiokafka import AIOKafkaProducer as ProducerFromKafka
 import aio_pika
 import boto3
 
