@@ -21,6 +21,7 @@ from .libs import log, log_error, TRACEBACK, clean_queue_label, get_free_port, \
 from .libs import ENCODING, RMQ_USER, RMQ_PASS, RMQ_HOST, KAFKA_HOST
 
 AWS_REGION_NAME = os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
+SQS_ENDPOINT_URL = os.environ.get('SQS_ENDPOINT_URL', '')
 class ConsumerABC(ABC):
     '''
     An abstract base class for defining consumer decorator loops
@@ -238,7 +239,9 @@ class SQSConsumerLoop(ConsumerABC):
                 """
                 session = get_session()
                 print('SQS Region: {0}'.format(AWS_REGION_NAME))
-                async with session.create_client('sqs', region_name=AWS_REGION_NAME) as client:
+                print('SQS_ENDPOINT_URL: {0}'.format(SQS_ENDPOINT_URL))
+                local_args = { "endpoint_url": SQS_ENDPOINT_URL } if SQS_ENDPOINT_URL else {}
+                async with session.create_client('sqs', region_name=AWS_REGION_NAME, **local_args) as client:
                     try:
                         response = await client.get_queue_url(QueueName=self.queue_label)
                     except botocore.exceptions.ClientError as err:

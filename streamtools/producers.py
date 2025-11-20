@@ -189,7 +189,9 @@ class SQSProducer(ProducerABC):
     '''
     QUEUE_TYPE = ["SQS"]
 
-    sqs = boto3.resource('sqs')
+    SQS_ENDPOINT_URL = os.environ.get('SQS_ENDPOINT_URL', '')
+    local_args = { "endpoint_url": SQS_ENDPOINT_URL } if SQS_ENDPOINT_URL else {}
+    sqs = boto3.resource('sqs', **local_args)
 
     def __init__(self, queue_name, queues_labels={}, **kwargs):
         super().__init__(queue_name, queues_labels, **kwargs)
