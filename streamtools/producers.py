@@ -200,14 +200,16 @@ class SQSProducer(ProducerABC):
         self.producer = None
 
     async def send(self, msg, *args, **kwargs):
-        message_group_id = kwargs.get('message_group_id', 'default')
-        message_dedupe_id = kwargs.get('message_dedupe_id', None)
-        response = self.queue.send_message(MessageBody=msg, MessageGroupId=message_group_id, MessageDeduplicationId=message_dedupe_id)
+        try:
+            message_group_id = kwargs.get('message_group_id', 'default')
+            response = self.queue.send_message(MessageBody=msg, MessageGroupId=message_group_id)
 
-        # The response is not a resource, but gives you a message ID and MD5
-        msgId, md5 = response.get('MessageId'), response.get('MD5OfMessageBody')
-        print(f"MessageId created: {msgId}")
-        print(f"MD5 created: {md5}")
+            # The response is not a resource, but gives you a message ID and MD5
+            msgId, md5 = response.get('MessageId'), response.get('MD5OfMessageBody')
+            print(f"MessageId created: {msgId}")
+            print(f"MD5 created: {md5}")
+        except Exception as e:
+            print(f"SQS Send failed: {str(e)}")
 
 
 class RMQIOProducer(ProducerABC):
