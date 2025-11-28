@@ -208,8 +208,10 @@ class SQSProducer(ProducerABC):
             msgId, md5 = response.get('MessageId'), response.get('MD5OfMessageBody')
             print(f"MessageId created: {msgId}")
             print(f"MD5 created: {md5}")
+            return True, response
         except Exception as e:
             print(f"SQS Send failed: {str(e)}")
+            return False, None
 
 
 class RMQIOProducer(ProducerABC):
