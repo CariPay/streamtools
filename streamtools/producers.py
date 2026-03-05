@@ -16,19 +16,20 @@ from .libs import HTTP_HOST, RMQ_USER, RMQ_PASS, RMQ_HOST, KAFKA_HOST, ENCODING
 
 
 class ProducerABC(ABC):
-    '''
+    """
     Abstract base class to be used for all other producers
     classes to interact with Kafka.
-    '''
+    """
+
     QUEUE_TYPE = [""]
 
     def __init__(self, queue_name, queues_labels={}, **kwargs):
         check_queue_type(self)
         self.queue_name = queue_name
         self.queues_labels = queues_labels
-        self.queue_label = (self.queues_labels
-                                .get(queue_name, {})
-                                .get("queue", queue_name))
+        self.queue_label = self.queues_labels.get(queue_name, {}).get(
+            "queue", queue_name
+        )
         self.queue_label = clean_queue_label(self.queue_label)
 
         self._queue_from_consumer = None
@@ -46,8 +47,7 @@ class ProducerABC(ABC):
 
     @queue_from_consumer.setter
     def queue_from_consumer(self, queue_from_consumer):
-        self.producer = \
-        self._queue_from_consumer = queue_from_consumer
+        self.producer = self._queue_from_consumer = queue_from_consumer
         log.info(f"Producer was set from consumer's queue object!")
         log.info(f"Producer: {self}")
 
@@ -56,13 +56,13 @@ class ProducerABC(ABC):
         pass
 
 
-
 class KafkaProducer(ProducerABC):
-    '''
+    """
     Uses the `KafkaProducer` class from the
     aiokafka library to publish messages
     directly to a Kafka broker.
-    '''
+    """
+
     QUEUE_TYPE = ["Kafka"]
 
     def __init__(self, queue_name, queues_labels={}, **kwargs):
@@ -77,7 +77,7 @@ class KafkaProducer(ProducerABC):
             bootstrap_servers=KAFKA_HOST,
             api_version=(1, 0, 0),
             key_serializer=lambda v: str(v).encode(ENCODING),
-            value_serializer=lambda v: json.dumps(v).encode(ENCODING)
+            value_serializer=lambda v: json.dumps(v).encode(ENCODING),
         )
         end = time.time()
         log.info(f"Got '{self.topic}' kafka producer in {round(end - start, 2)}s!")
@@ -89,22 +89,18 @@ class KafkaProducer(ProducerABC):
         try:
             # @TODO: pack message
 
-            log.info('sending on topic {}'.format(self.topic))
-            log.info('sending message {}'.format(self.key))
+            log.info("sending on topic {}".format(self.topic))
+            log.info("sending message {}".format(self.key))
 
-            future = self._producer.send(
-                self.topic,
-                key=self.key,
-                value=message
-            )
+            future = self._producer.send(self.topic, key=self.key, value=message)
 
             future.get(timeout=5)
-            log.info('sent message {}'.format(self.key))
+            log.info("sent message {}".format(self.key))
 
             return True
 
         except Exception as e:
-            log.error('Failed to send: ')
+            log.error("Failed to send: ")
             log.error(e)
             traceback.print_exc()
 
@@ -112,7 +108,7 @@ class KafkaProducer(ProducerABC):
 
 
 class HTTPProducer(ProducerABC):
-    '''
+    """
     "Uses an external Kafka producer service to
     have messages sent to the Kafka broker to be
     added to the queues. Messages are sent out as
@@ -120,12 +116,13 @@ class HTTPProducer(ProducerABC):
     two required fields:\n
     \"msg_topic\": for the relevant kafka topic queue\n
     \"msg_key\": to link back messages to the agent
-    '''
+    """
+
     QUEUE_TYPE = ["HTTP", "Kafka", "RabbitMQ"]
 
     HEADERS = {
-        "JSON": {'content-type': 'application/json'},
-        "SSI": {'content-type': 'application/ssi-agent-wire'}
+        "JSON": {"content-type": "application/json"},
+        "SSI": {"content-type": "application/ssi-agent-wire"},
     }
 
     def __init__(self, queue_name="", queues_labels={}, **kwargs):
@@ -151,7 +148,7 @@ class HTTPProducer(ProducerABC):
 
     async def send_message_via_aiohttp(self, url, msg, headers, method="post"):
         async with aiohttp.ClientSession() as session:
-            send_request = session.post if method.lower()=="post" else session.get
+            send_request = session.post if method.lower() == "post" else session.get
             async with send_request(url, data=msg, headers=headers) as response:
                 resp = response
                 if resp.status != 202:
@@ -159,18 +156,23 @@ class HTTPProducer(ProducerABC):
                     log.info(f"Response: ({resp.status}) {resp_text}")
         return response
 
-    async def send(self, msg, method="post", endpoint=None, headers_tag="JSON", *args, **kwargs):
-        endpoint =  endpoint or f"http://{self.host}/{self.route}"
+    async def send(
+        self, msg, method="post", endpoint=None, headers_tag="JSON", *args, **kwargs
+    ):
+        endpoint = endpoint or f"http://{self.host}/{self.route}"
         headers = self.HEADERS.get(headers_tag, self.HEADERS["JSON"])
 
         msg = self._add_class_attrs_to_msg(msg)
-        return await self.send_message_via_aiohttp(url=endpoint, msg=msg, headers=headers, method=method)
+        return await self.send_message_via_aiohttp(
+            url=endpoint, msg=msg, headers=headers, method=method
+        )
 
 
 class AsyncIOProducer(ProducerABC):
-    '''
+    """
     Uses an internal AsyncIO queue to pass messages around.
-    '''
+    """
+
     QUEUE_TYPE = ["AsyncIO"]
 
     def __init__(self, queue_name, queues_labels={}, **kwargs):
@@ -178,20 +180,20 @@ class AsyncIOProducer(ProducerABC):
         self.producer = None
 
     async def send(self, msg, *args, **kwargs):
-        assert self.producer != None, \
-            "Producer queue object is not set"
+        assert self.producer != None, "Producer queue object is not set"
         await self.producer.put(msg)
 
 
 class SQSProducer(ProducerABC):
-    '''
+    """
     Uses AWS SQS to pass messages around.
-    '''
+    """
+
     QUEUE_TYPE = ["SQS"]
 
-    SQS_ENDPOINT_URL = os.environ.get('SQS_ENDPOINT_URL', '')
-    local_args = { "endpoint_url": SQS_ENDPOINT_URL } if SQS_ENDPOINT_URL else {}
-    sqs = boto3.resource('sqs', **local_args)
+    SQS_ENDPOINT_URL = os.environ.get("SQS_ENDPOINT_URL", "")
+    local_args = {"endpoint_url": SQS_ENDPOINT_URL} if SQS_ENDPOINT_URL else {}
+    sqs = boto3.resource("sqs", **local_args)
 
     def __init__(self, queue_name, queues_labels={}, **kwargs):
         super().__init__(queue_name, queues_labels, **kwargs)
@@ -201,13 +203,18 @@ class SQSProducer(ProducerABC):
 
     async def send(self, msg, *args, **kwargs):
         try:
-            message_group_id = kwargs.get('message_group_id', 'default')
-            message_dedupe_id = kwargs.get("message_dedupe_id")
-    
-            response = self.queue.send_message(MessageBody=msg, MessageGroupId=message_group_id, MessageDeduplicationId=message_dedupe_id)
+            params = {
+                "MessageBody": msg,
+                "MessageGroupId": kwargs.get("message_group_id", "default"),
+            }
+
+            if kwargs.get("message_dedupe_id"):
+                params["MessageDeduplicationId"] = str(kwargs.get("message_dedupe_id"))
+
+            response = self.queue.send_message(**params)
 
             # The response is not a resource, but gives you a message ID and MD5
-            msgId, md5 = response.get('MessageId'), response.get('MD5OfMessageBody')
+            msgId, md5 = response.get("MessageId"), response.get("MD5OfMessageBody")
             print(f"MessageId created: {msgId}")
             print(f"MD5 created: {md5}")
             return True, response
@@ -217,10 +224,11 @@ class SQSProducer(ProducerABC):
 
 
 class RMQIOProducer(ProducerABC):
-    '''
+    """
     Uses an external RabbitMQ broker queue to pass
     messages around.
-    '''
+    """
+
     QUEUE_TYPE = ["RabbitMQ"]
 
     def __init__(self, queue_name, queues_labels={}, **kwargs):
@@ -231,9 +239,14 @@ class RMQIOProducer(ProducerABC):
 
     async def a_init(self):
         rmq_url = f"amqp://{RMQ_USER}:{RMQ_PASS}@{self.host}/"
-        log.info(f"Producer connecting to ip <{self.host}> with topic <{self.routing_key}>")
-        self.connection = await aio_pika.connect_robust(rmq_url,loop=self.loop) \
-                                    if not self.queue_from_consumer else self.queue_from_consumer
+        log.info(
+            f"Producer connecting to ip <{self.host}> with topic <{self.routing_key}>"
+        )
+        self.connection = (
+            await aio_pika.connect_robust(rmq_url, loop=self.loop)
+            if not self.queue_from_consumer
+            else self.queue_from_consumer
+        )
         self.channel = await self.connection.channel()
 
     def add_agent_uuid(self, **kwargs_from_agent):
@@ -245,8 +258,5 @@ class RMQIOProducer(ProducerABC):
             self.channel = await self.connection.channel()
 
         await self.channel.default_exchange.publish(
-            aio_pika.Message(
-                body=msg.encode()
-            ),
-            routing_key=self.routing_key
+            aio_pika.Message(body=msg.encode()), routing_key=self.routing_key
         )
